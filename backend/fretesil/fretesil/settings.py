@@ -1,7 +1,7 @@
 import os
 import dotenv
 
-dotenv.read_dotenv()
+dotenv.load_dotenv()
 
 """
 Django settings for fretesil project.
