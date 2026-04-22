@@ -3,6 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_application_1/CadastroLogin/cadastro.dart';
 import 'package:flutter_application_1/CadastroLogin/login.dart';
 
+import 'home/home_empresa.dart';
+
 class App extends StatelessWidget {
   const App({super.key});
 
@@ -21,6 +23,7 @@ class App extends StatelessWidget {
         routes: {
           '/cadastro': (context) => const PaginaCadastro(),
           '/login': (context) => const PaginaLogin(),
+          '/homeEmpresa': (context) => const HomeEmpresa(),
         },
       ),
     );

@@ -256,6 +256,12 @@ class _PaginaCadastroState extends State<PaginaCadastro> {
           FilledButton(
             onPressed: () {
               // TODO: lógica de cadastro
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cadastro realizado com sucesso!')),
+                );
+
+              Navigator.pushNamed(context, '/homeEmpresa');
             },
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
