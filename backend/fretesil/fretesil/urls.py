@@ -19,5 +19,16 @@ from django.urls import path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/cadastro_usuario/', include('cadastro_usuario.urls'))
+    path('api/cadastro_usuario/', include('cadastro_usuario.urls')),
+    # Rota para perfis (Empresa/Motorista)
+    path('api/usuarios/', include('usuarios.urls')),
+    
+    # Rota para o Dashboard de Cargas (Euro Truck Style)
+    path('api/fretes/', include('cargas.urls')),
+    
+    # Rota para Avaliações e Rankings
+    path('api/feedback/', include('feedback.urls')),
+    
+    # Rota para autenticação padrão do DRF (Login/Logout)
+    path('api-auth/', include('rest_framework.urls')),
 ]

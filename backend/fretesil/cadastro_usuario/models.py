@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 # Modelo para os dados de Empresa
 class Empresa(models.Model):
@@ -18,4 +19,4 @@ class Caminhoneiro(models.Model):
 
     def __str__(self):
         return self.nome_completo
-# Create your models here.
+
