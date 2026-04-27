@@ -15,19 +15,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/cadastro_usuario/', include('cadastro_usuario.urls')),
     # Rota para perfis (Empresa/Motorista)
-    path('api/usuarios/', include('usuarios.urls')),
+    path('api/usuario/', include('usuario.urls')),
     
     # Rota para o Dashboard de Cargas (Euro Truck Style)
     path('api/fretes/', include('cargas.urls')),
     
     # Rota para Avaliações e Rankings
-    path('api/feedback/', include('feedback.urls')),
+    path('api/avaliacao/', include('avaliacao.urls')),
     
     # Rota para autenticação padrão do DRF (Login/Logout)
     path('api-auth/', include('rest_framework.urls')),

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator, MaxValueValidator  
+from django.core.validators import MinValueValidator, MaxValueValidator
+from usuario.models import Empresa, Caminhoneiro
 
 class Carga(models.Model):
     STATUS_CHOICES = [
