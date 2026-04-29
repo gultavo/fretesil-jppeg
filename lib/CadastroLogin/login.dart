@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PaginaLogin extends StatefulWidget {
   const PaginaLogin({super.key});
@@ -9,15 +12,76 @@ class PaginaLogin extends StatefulWidget {
 
 class _PaginaLoginState extends State<PaginaLogin> {
   String _tipoSelecionado = 'empresa';
+  bool _carregando = false;
 
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
+
+  static const String _baseUrl = 'http://localhost:8000/api';
 
   @override
   void dispose() {
     _emailController.dispose();
     _senhaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    setState(() => _carregando = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/token/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': _emailController.text.trim(),
+          'password': _senhaController.text,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('access_token', data['access']);
+        await prefs.setString('refresh_token', data['refresh']);
+        await prefs.setString('tipo_usuario', _tipoSelecionado);
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login realizado com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          _tipoSelecionado == 'empresa' ? '/homeEmpresa' : '/homeFreteiro',
+          (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('E-mail ou senha incorretos.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erro de conexão. Verifique o servidor.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _carregando = false);
+    }
   }
 
   @override
@@ -37,7 +101,6 @@ class _PaginaLoginState extends State<PaginaLogin> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 32.0),
         children: [
-          // Header
           const SizedBox(height: 8),
           Text(
             'Entre na sua conta',
@@ -55,10 +118,8 @@ class _PaginaLoginState extends State<PaginaLogin> {
               color: colorScheme.onSurfaceVariant,
             ),
           ),
-
           const SizedBox(height: 28),
 
-          // Tipo de conta
           Text(
             'Tipo de conta',
             style: textTheme.labelLarge?.copyWith(
@@ -81,28 +142,21 @@ class _PaginaLoginState extends State<PaginaLogin> {
             ],
             selected: {_tipoSelecionado},
             onSelectionChanged: (newSelection) {
-              setState(() {
-                _tipoSelecionado = newSelection.first;
-              });
+              setState(() => _tipoSelecionado = newSelection.first);
             },
             style: SegmentedButton.styleFrom(
               selectedBackgroundColor: colorScheme.primaryContainer,
               selectedForegroundColor: colorScheme.onPrimaryContainer,
             ),
           ),
-
           const SizedBox(height: 24),
 
-          // Card de acesso
           Card(
             elevation: 0,
             color: colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: colorScheme.outlineVariant,
-                width: 1,
-              ),
+              side: BorderSide(color: colorScheme.outlineVariant),
             ),
             child: Padding(
               padding: const EdgeInsets.all(20.0),
@@ -147,28 +201,32 @@ class _PaginaLoginState extends State<PaginaLogin> {
               ),
             ),
           ),
-
           const SizedBox(height: 28),
-          // Botão de login
+
           FilledButton(
-            onPressed: () {
-              // TODO: lógica de login
-            },
+            onPressed: _carregando ? null : _login,
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
-              'Entrar',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+            child: _carregando
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    'Entrar',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
           ),
-
           const SizedBox(height: 16),
 
-          // Login link
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -177,9 +235,7 @@ class _PaginaLoginState extends State<PaginaLogin> {
                 style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
               TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/cadastro');
-                },
+                onPressed: () => Navigator.pushNamed(context, '/cadastro'),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
                   minimumSize: Size.zero,
