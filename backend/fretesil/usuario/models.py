@@ -8,7 +8,14 @@ class Empresa(models.Model):
     cnpj = models.CharField(max_length=14, unique=True)
     endereco_sede = models.CharField(max_length=255, blank=True)
     # Média de notas para o ranking da Blacklist
+
+    nota_corte_padrao = models.FloatField(
+        default=0.0, 
+        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)]
+    )
+
     media_avaliacao = models.FloatField(default=0.0, editable=False)
+
 
     def __str__(self):
         return self.razao_social
@@ -20,6 +27,7 @@ class Caminhoneiro(models.Model):
     placa_veiculo = models.CharField(max_length=7)
 
     media_notas = models.FloatField(default=0.0, editable=False)
+    e_diamante = models.BooleanField(default=False)
 
     def __str__(self):
         return self.nome_completo

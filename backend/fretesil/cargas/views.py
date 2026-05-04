@@ -28,17 +28,30 @@ class CargaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='aceitar-carga')
     def aceitar_carga(self, request, pk=None):
         """ Rota para o motorista clicar no botão 'Pegar Carga' no Flutter """
-        carga = self.get_object()
+        consumo_informado = request.data.get('consumo')
         user = request.user
+        carga = self.get_object()
+
+        if not consumo_informado:
+            return Response({'erro': 'Informe o consumo do seu veículo.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not hasattr(user, 'perfil_motorista'):
             return Response({'erro': 'Somente motoristas podem aceitar cargas.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        motorista = user.perfil_motorista
 
-        if carga.status != 'disponivel':
-            return Response({'erro': 'Esta carga já foi coletada ou está indisponível.'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            carga = Carga.objects.select_for_update().get(pk=pk)
+            
+            if motorista.media_notas < carga.nota_minima_motorista:
+                return Response({'erro': 'Você não tem nota suficiente para aceitar esta carga.'}, status=status.HTTP_403_FORBIDDEN)
+
+            if carga.status != 'disponivel':
+                return Response({'erro': 'Esta carga já foi coletada ou está indisponível.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Atualiza o status e vincula o motorista
         carga.motorista_alocado = user.perfil_motorista
+        carga.consumo_veiculo_alocado = float(consumo_informado)
         carga.status = 'em_transito'
         carga.save()
 

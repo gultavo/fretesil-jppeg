@@ -15,11 +15,24 @@ class Carga(models.Model):
     origem = models.CharField(max_length=255)
     destino = models.CharField(max_length=255)
     distancia_km = models.FloatField()
+
+    nota_minima_motorista = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)]
+    )
+
+    consumo_veiculo_alocado = models.FloatField(null=True, blank=True) #km/l do motorista
     
     # Valores para o cálculo de Lucro Líquido
     valor_bruto_frete = models.DecimalField(max_digits=10, decimal_places=2)
     estimativa_pedagio = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
-    comissao_app = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    comissao_app = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, editable=False)
+
+    def save(self, *args, **kwargs):
+        from decimal import Decimal
+        taxa = Decimal(0.01)
+        self.comissao_app = self.valor_bruto_frete * taxa
+        super(Carga, self).save(*args, **kwargs)
     
     data_publicacao = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='disponivel')
