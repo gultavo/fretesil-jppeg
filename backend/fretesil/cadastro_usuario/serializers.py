@@ -1,7 +1,6 @@
-# serializers.py
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Empresa, Caminhoneiro
+from usuario.models import Empresa, Caminhoneiro
 
 class EmpresaSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(write_only=True)
@@ -19,14 +18,15 @@ class EmpresaSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         email = validated_data.pop('email')
         senha = validated_data.pop('senha')
-
         if User.objects.filter(username=email).exists():
             raise serializers.ValidationError("E-mail já cadastrado")
-
         user = User.objects.create_user(username=email, email=email, password=senha)
-        empresa = Empresa.objects.create(user=user, **validated_data)
-        return empresa
+        return Empresa.objects.create(user=user, **validated_data)
 
+class EmpresaReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Empresa
+        fields = '__all__'
 
 class CaminhoneiroSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(write_only=True)
@@ -49,18 +49,10 @@ class CaminhoneiroSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         email = validated_data.pop('email')
         senha = validated_data.pop('senha')
-
         if User.objects.filter(username=email).exists():
             raise serializers.ValidationError("E-mail já cadastrado")
-
         user = User.objects.create_user(username=email, email=email, password=senha)
-        caminhoneiro = Caminhoneiro.objects.create(user=user, **validated_data)
-        return caminhoneiro
-
-class EmpresaReadSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Empresa
-        fields = '__all__'
+        return Caminhoneiro.objects.create(user=user, **validated_data)
 
 class CaminhoneiroReadSerializer(serializers.ModelSerializer):
     class Meta:
