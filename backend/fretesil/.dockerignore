@@ -1,0 +1,22 @@
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Banco local / logs
+*.sqlite3
+*.log
+
+# Variaveis de ambiente (passadas via docker-compose)
+.env
+
+# Controle de versao / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
