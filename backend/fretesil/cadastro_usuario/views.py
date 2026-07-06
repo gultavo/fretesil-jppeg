@@ -1,19 +1,19 @@
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import Empresa, Caminhoneiro
 from usuario.models import Empresa, Caminhoneiro
 from .serializers import (
     EmpresaSerializer, EmpresaReadSerializer,
     CaminhoneiroSerializer, CaminhoneiroReadSerializer,
 )
 
-class EmpresaViewSet(viewsets.ModelViewSet):
-    queryset = Empresa.objects.all()
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return EmpresaSerializer
-        return EmpresaReadSerializer
+# Estes endpoints existem SOMENTE para o cadastro público (POST).
+# Listar/editar/apagar perfis é feito nas rotas autenticadas de `usuario`.
+class EmpresaViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    queryset = Empresa.objects.all()
+    serializer_class = EmpresaSerializer
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = EmpresaSerializer(data=request.data)
@@ -23,13 +23,10 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         return Response(read.data, status=status.HTTP_201_CREATED)
 
 
-class CaminhoneiroViewSet(viewsets.ModelViewSet):
+class CaminhoneiroViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     queryset = Caminhoneiro.objects.all()
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return CaminhoneiroSerializer
-        return CaminhoneiroReadSerializer
+    serializer_class = CaminhoneiroSerializer
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = CaminhoneiroSerializer(data=request.data)

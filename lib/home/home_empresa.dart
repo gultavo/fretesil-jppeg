@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../pages/candidatos_page.dart';
+import '../pages/avaliar_motorista_page.dart';
+import '../pages/perfil_empresa_page.dart';
 
 class HomeEmpresa extends StatefulWidget {
   const HomeEmpresa({super.key});
@@ -42,6 +45,59 @@ Future<void> _carregarCargas() async {
   }
 }
 
+  Future<void> _verCandidatos(Map<String, dynamic> carga) async {
+    final mudou = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CandidatosPage(
+          cargaId: carga['id'],
+          cargaTitulo: carga['titulo']?.toString() ?? 'Carga',
+        ),
+      ),
+    );
+    if (mudou == true) _carregarCargas();
+  }
+
+  Future<void> _finalizar(Map<String, dynamic> carga) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Finalizar entrega?'),
+        content: Text('Confirmar que "${carga['titulo']}" foi entregue? '
+            'Depois disso você poderá avaliar o motorista.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Finalizar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final sucesso = await ApiService.finalizarCarga(carga['id']);
+    if (!mounted) return;
+    if (sucesso) {
+      _carregarCargas();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Entrega finalizada!'), backgroundColor: Colors.green));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Não foi possível finalizar.'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _avaliar(Map<String, dynamic> carga) async {
+    final feito = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AvaliarMotoristaPage(
+          cargaId: carga['id'],
+          caminhoneiroId: carga['motorista_alocado'],
+          caminhoneiroNome: carga['motorista_nome']?.toString() ?? 'Motorista',
+        ),
+      ),
+    );
+    if (feito == true) _carregarCargas();
+  }
+
   List<dynamic> get _ativas =>
       _cargas.where((c) => c['status'] == 'disponivel').toList();
   List<dynamic> get _emTransito =>
@@ -65,6 +121,14 @@ Future<void> _carregarCargas() async {
             backgroundColor: colorScheme.primaryContainer,
             foregroundColor: colorScheme.onPrimaryContainer,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.business_outlined),
+                tooltip: 'Meu perfil',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PerfilEmpresaPage()),
+                ),
+              ),
               IconButton(
                 icon: const Icon(Icons.logout_outlined),
                 tooltip: 'Sair',
@@ -257,7 +321,12 @@ Future<void> _carregarCargas() async {
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
         itemCount: lista.length,
-        itemBuilder: (ctx, i) => _EmpresaCargaCard(carga: lista[i]),
+        itemBuilder: (ctx, i) => _EmpresaCargaCard(
+          carga: lista[i],
+          onVerCandidatos: () => _verCandidatos(lista[i]),
+          onFinalizar: () => _finalizar(lista[i]),
+          onAvaliar: () => _avaliar(lista[i]),
+        ),
       ),
     );
   }
@@ -310,8 +379,16 @@ class _StatChip extends StatelessWidget {
 // ─── Card de carga da empresa ─────────────────────────────────────────────
 class _EmpresaCargaCard extends StatelessWidget {
   final Map<String, dynamic> carga;
+  final VoidCallback onVerCandidatos;
+  final VoidCallback onFinalizar;
+  final VoidCallback onAvaliar;
 
-  const _EmpresaCargaCard({required this.carga});
+  const _EmpresaCargaCard({
+    required this.carga,
+    required this.onVerCandidatos,
+    required this.onFinalizar,
+    required this.onAvaliar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -439,28 +516,78 @@ class _EmpresaCargaCard extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Abrir detalhes')),
-                    );
-                  },
-                  icon: const Icon(Icons.visibility_outlined, size: 14),
-                  label: const Text('Detalhes'),
-                  style: OutlinedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
+                _buildAcao(context, status),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildAcao(BuildContext context, String status) {
+    final style = OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      minimumSize: Size.zero,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      textStyle: const TextStyle(fontSize: 12),
+    );
+
+    if (status == 'disponivel') {
+      final n = carga['total_candidaturas'] ?? 0;
+      return FilledButton.tonalIcon(
+        onPressed: onVerCandidatos,
+        icon: const Icon(Icons.people_outline, size: 16),
+        label: Text('Candidatos ($n)'),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+
+    if (status == 'em_transito') {
+      return FilledButton.icon(
+        onPressed: onFinalizar,
+        icon: const Icon(Icons.check_circle_outline, size: 16),
+        label: const Text('Finalizar'),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+
+    // finalizado
+    final temMotorista = carga['motorista_alocado'] != null;
+    final avaliado = carga['motorista_avaliado'] == true;
+    if (temMotorista && !avaliado) {
+      return FilledButton.icon(
+        onPressed: onAvaliar,
+        icon: const Icon(Icons.star_outline, size: 16),
+        label: const Text('Avaliar'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFE8A020),
+          foregroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+    if (temMotorista && avaliado) {
+      return const Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.verified, size: 16, color: Colors.green),
+        SizedBox(width: 4),
+        Text('Avaliado', style: TextStyle(color: Colors.green, fontSize: 12)),
+      ]);
+    }
+    return OutlinedButton(onPressed: null, style: style, child: const Text('Concluído'));
   }
 
   (String, Color) _statusInfo(String status, ColorScheme cs) {

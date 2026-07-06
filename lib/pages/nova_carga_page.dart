@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 
 class NovaCargaPage extends StatefulWidget {
@@ -21,9 +24,12 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
   final _valorBrutoCtrl = TextEditingController();
   final _pedagioCtrl = TextEditingController();
   final _notaMinimaCtrl = TextEditingController(text: '0.0');
+  final _descricaoCtrl = TextEditingController();
+  XFile? _foto;
 
   @override
   void dispose() {
+    _descricaoCtrl.dispose();
     _tituloCtrl.dispose();
     _origemCtrl.dispose();
     _destinoCtrl.dispose();
@@ -48,6 +54,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
           'titulo': _tituloCtrl.text.trim(),
           'origem': _origemCtrl.text.trim(),
           'destino': _destinoCtrl.text.trim(),
+          'descricao': _descricaoCtrl.text.trim(),
           'distancia_km': _toDouble(_distanciaCtrl.text),
           'valor_bruto_frete': _toDouble(_valorBrutoCtrl.text),
           'estimativa_pedagio': _pedagioCtrl.text.trim().isEmpty
@@ -58,7 +65,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
               : _toDouble(_notaMinimaCtrl.text),
         };
 
-      final result = await ApiService.criarCarga(dados);
+      final result = await ApiService.criarCarga(dados, foto: _foto);
       print('RESPONSE: ${result['body']}'); // ← F12 → Console
       print('STATUS: ${result['statusCode']}');
       if (!mounted) return;
@@ -105,7 +112,6 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
 
     return Scaffold(
       backgroundColor: cs.surfaceContainerLowest,
@@ -130,6 +136,25 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
               hint: 'Ex: Grãos de Soja — Curitiba p/ Santos',
               icon: Icons.label_outline,
               validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null,
+            ),
+            const SizedBox(height: 12),
+
+            _CampoTexto(
+              controller: _descricaoCtrl,
+              label: 'Descrição (opcional)',
+              hint: 'Detalhes da carga, requisitos, etc.',
+              icon: Icons.notes_outlined,
+            ),
+            const SizedBox(height: 12),
+
+            _FotoPicker(
+              foto: _foto,
+              onPick: () async {
+                final img = await ImagePicker().pickImage(
+                    source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
+                if (img != null) setState(() => _foto = img);
+              },
+              onClear: () => setState(() => _foto = null),
             ),
             const SizedBox(height: 12),
 
@@ -355,6 +380,58 @@ class _CampoNumerico extends StatelessWidget {
         fillColor: cs.surface,
       ),
     );
+  }
+}
+
+// ─── Seletor de foto da carga ─────────────────────────────────────────────
+class _FotoPicker extends StatelessWidget {
+  final XFile? foto;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  const _FotoPicker({required this.foto, required this.onPick, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    if (foto == null) {
+      return OutlinedButton.icon(
+        onPressed: onPick,
+        icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+        label: const Text('Adicionar foto da carga'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+    final provider = kIsWeb
+        ? NetworkImage(foto!.path)
+        : FileImage(File(foto!.path)) as ImageProvider;
+    return Stack(children: [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image(
+          image: provider,
+          height: 160,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+      ),
+      Positioned(
+        top: 6,
+        right: 6,
+        child: CircleAvatar(
+          backgroundColor: cs.surface,
+          radius: 16,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: Icon(Icons.close, size: 18, color: cs.error),
+            onPressed: onClear,
+          ),
+        ),
+      ),
+    ]);
   }
 }
 

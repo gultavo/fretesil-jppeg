@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../pages/perfil_motorista_page.dart';
+import '../pages/perfil_empresa_page.dart';
+import '../pages/avaliar_empresa_page.dart';
 
 class HomeFreteiro extends StatefulWidget {
   const HomeFreteiro({super.key});
@@ -11,6 +14,8 @@ class HomeFreteiro extends StatefulWidget {
 class _HomeFreteiroState extends State<HomeFreteiro>
     with SingleTickerProviderStateMixin {
   List<dynamic> _disponiveis = [];
+  List<dynamic> _candidaturas = [];
+  List<dynamic> _entregas = [];
   Map<String, dynamic>? _cargaAtiva;
   bool _carregando = true;
   String? _erro;
@@ -28,7 +33,7 @@ class _HomeFreteiroState extends State<HomeFreteiro>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _carregarTudo();
   }
 
@@ -43,10 +48,14 @@ Future<void> _carregarTudo() async {
   try {
     final lista = await ApiService.listarCargasDisponiveis();
     final ativa = await ApiService.cargaAtiva();
+    final candidaturas = await ApiService.minhasCandidaturas();
+    final entregas = await ApiService.minhasEntregas();
     if (mounted) {
       setState(() {
         _disponiveis = lista;
         _cargaAtiva = ativa;
+        _candidaturas = candidaturas;
+        _entregas = entregas;
       });
     }
   } catch (e, stack) {
@@ -58,27 +67,49 @@ Future<void> _carregarTudo() async {
   }
 }
 
-  Future<void> _aceitarCarga(Map<String, dynamic> carga) async {
+  Future<void> _candidatar(Map<String, dynamic> carga) async {
     final confirmou = await _confirmar(
-      titulo: 'Aceitar carga?',
+      titulo: 'Candidatar-se a esta carga?',
       mensagem:
-          '${carga['titulo']}\n${carga['origem']} → ${carga['destino']}\n\nVocê ficará alocado até a entrega.',
+          '${carga['titulo']}\n${carga['origem']} → ${carga['destino']}\n\n'
+          'A empresa vai analisar seu perfil e decidir se aceita você.',
     );
     if (confirmou != true) return;
 
-    final ok = await ApiService.aceitarCarga(carga['id']);
+    final res = await ApiService.candidatarCarga(carga['id']);
     if (!mounted) return;
 
-    if (ok) {
-      setState(() {
-        _cargaAtiva = carga;
-        _disponiveis.remove(carga);
-      });
-      _tabController.animateTo(1);
-      _snack('Carga aceita! Boa viagem! 🚛', _green);
+    if (res['statusCode'] == 201) {
+      _snack('Candidatura enviada! Aguarde a resposta da empresa. 📨', _green);
+      _carregarTudo();
     } else {
-      _snack('Não foi possível aceitar esta carga.', _red);
+      final body = res['body'];
+      final msg = body is Map && body['erro'] != null
+          ? body['erro'].toString()
+          : 'Não foi possível se candidatar.';
+      _snack(msg, _red);
     }
+  }
+
+  Future<void> _avaliarEmpresa(Map<String, dynamic> carga) async {
+    final feito = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AvaliarEmpresaPage(
+          cargaId: carga['id'],
+          empresaNome: carga['empresa_nome']?.toString() ?? 'Empresa',
+        ),
+      ),
+    );
+    if (feito == true) _carregarTudo();
+  }
+
+  void _verPerfilEmpresa(dynamic empresaId) {
+    if (empresaId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PerfilEmpresaPage(empresaId: empresaId)),
+    );
   }
 
   Future<bool?> _confirmar({required String titulo, required String mensagem}) {
@@ -158,6 +189,14 @@ Future<void> _carregarTudo() async {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person_outline, color: _accent, size: 22),
+            tooltip: 'Meu perfil',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PerfilMotoristaPage()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout, color: _textMuted, size: 20),
             onPressed: () async {
               await ApiService.logout();
@@ -174,6 +213,8 @@ Future<void> _carregarTudo() async {
           unselectedLabelColor: _textMuted,
           indicatorColor: _accent,
           indicatorWeight: 2,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: [
             Tab(text: 'DISPONÍVEIS (${_disponiveis.length})'),
             Tab(
@@ -195,6 +236,7 @@ Future<void> _carregarTudo() async {
                 ],
               ),
             ),
+            Tab(text: 'CANDIDATURAS (${_candidaturas.length})'),
           ],
         ),
       ),
@@ -207,8 +249,40 @@ Future<void> _carregarTudo() async {
                   children: [
                     _buildDisponiveis(),
                     _buildCargaAtiva(),
+                    _buildCandidaturas(),
                   ],
                 ),
+    );
+  }
+
+  // ─── Aba: Minhas candidaturas ─────────────────────────────────────────────
+  Widget _buildCandidaturas() {
+    if (_candidaturas.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment_outlined, color: _textMuted, size: 56),
+            SizedBox(height: 12),
+            Text('Nenhuma candidatura ainda',
+                style: TextStyle(color: _textMuted, fontWeight: FontWeight.w600)),
+            SizedBox(height: 4),
+            Text('Candidate-se a uma carga na aba "Disponíveis"',
+                style: TextStyle(color: _textMuted, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: _accent,
+      backgroundColor: _card,
+      onRefresh: _carregarTudo,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _candidaturas.length,
+        itemBuilder: (ctx, i) => _CandidaturaCard(candidatura: _candidaturas[i]),
+      ),
     );
   }
 
@@ -262,7 +336,7 @@ Future<void> _carregarTudo() async {
         itemCount: _disponiveis.length,
         itemBuilder: (ctx, i) => _CargaCard(
           carga: _disponiveis[i],
-          onAceitar: () => _aceitarCarga(_disponiveis[i]),
+          onCandidatar: () => _candidatar(_disponiveis[i]),
         ),
       ),
     );
@@ -270,7 +344,11 @@ Future<void> _carregarTudo() async {
 
   // ─── Aba: Carga ativa ─────────────────────────────────────────────────────
   Widget _buildCargaAtiva() {
-    if (_cargaAtiva == null) {
+    final pendentesAvaliar =
+        _entregas.where((e) => e['empresa_avaliada'] != true).toList();
+
+    // Nada para mostrar: nem viagem ativa, nem entrega para avaliar
+    if (_cargaAtiva == null && pendentesAvaliar.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -284,107 +362,188 @@ Future<void> _carregarTudo() async {
                     fontWeight: FontWeight.w600,
                     fontSize: 16)),
             const SizedBox(height: 6),
-            const Text('Aceite uma carga na aba anterior',
+            const Text('Candidate-se a uma carga na aba anterior',
                 style: TextStyle(color: _textMuted, fontSize: 12)),
           ],
         ),
       );
     }
 
-    final c = _cargaAtiva!;
+    return RefreshIndicator(
+      color: _accent,
+      backgroundColor: _card,
+      onRefresh: _carregarTudo,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_cargaAtiva != null) _viagemAtivaCard(_cargaAtiva!),
+          if (pendentesAvaliar.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('AVALIE SUAS ENTREGAS',
+                style: TextStyle(
+                    color: _accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    letterSpacing: 1.2)),
+            const SizedBox(height: 4),
+            const Text('Como foi trabalhar com estas empresas?',
+                style: TextStyle(color: _textMuted, fontSize: 12)),
+            const SizedBox(height: 10),
+            ...pendentesAvaliar.map(_entregaCard),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _viagemAtivaCard(Map<String, dynamic> c) {
     final valor = _fmt(c['valor_bruto_frete']);
     final pedagio = _fmt(c['estimativa_pedagio']);
-    final distancia =
-        (c['distancia_km'] as num?)?.toStringAsFixed(0) ?? '—';
+    final distancia = (c['distancia_km'] as num?)?.toStringAsFixed(0) ?? '—';
     final empresa = c['empresa_nome'] ?? '—';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _green.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _green.withOpacity(0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.circle, size: 8, color: _green),
+                  SizedBox(width: 6),
+                  Text('EM TRÂNSITO',
+                      style: TextStyle(
+                          color: _green,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          letterSpacing: 1)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          (c['titulo'] ?? '').toString().toUpperCase(),
+          style: const TextStyle(
+              color: _accent,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              letterSpacing: 1),
+        ),
+        const SizedBox(height: 4),
+        // Nome da empresa clicável → perfil público
+        InkWell(
+          onTap: () => _verPerfilEmpresa(c['empresa']),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(empresa,
+                  style: const TextStyle(color: _textMuted, fontSize: 13)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 16, color: _textMuted),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF2E3340)),
+          ),
+          child: Column(
+            children: [
+              _RotaLinha(
+                  icon: Icons.radio_button_checked,
+                  label: 'ORIGEM',
+                  valor: c['origem'] ?? '—',
+                  cor: _green),
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: Container(
+                    height: 24, width: 1, color: _textMuted.withOpacity(0.2)),
+              ),
+              _RotaLinha(
+                  icon: Icons.location_on,
+                  label: 'DESTINO',
+                  valor: c['destino'] ?? '—',
+                  cor: _red),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _MetricBox(label: 'DISTÂNCIA', value: '$distancia km', color: _blue),
+            const SizedBox(width: 10),
+            _MetricBox(label: 'VALOR BRUTO', value: valor, color: _green),
+            const SizedBox(width: 10),
+            _MetricBox(label: 'PEDÁGIO', value: pedagio, color: _textMuted),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _entregaCard(dynamic e) {
+    final titulo = e['titulo']?.toString() ?? 'Entrega';
+    final empresa = e['empresa_nome']?.toString() ?? '—';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _accent.withOpacity(0.35)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Badge status
+          Text(titulo,
+              style: const TextStyle(
+                  color: _textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(empresa, style: const TextStyle(color: _textMuted, fontSize: 12)),
+          const SizedBox(height: 10),
           Row(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _green.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _green.withOpacity(0.4)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.circle, size: 8, color: _green),
-                    SizedBox(width: 6),
-                    Text('EM TRÂNSITO',
-                        style: TextStyle(
-                            color: _green,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)),
-                  ],
+              TextButton.icon(
+                onPressed: () => _verPerfilEmpresa(e['empresa']),
+                icon: const Icon(Icons.visibility_outlined, size: 15, color: _textMuted),
+                label: const Text('Ver empresa',
+                    style: TextStyle(color: _textMuted, fontSize: 12)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Título
-          Text(
-            (c['titulo'] ?? '').toUpperCase(),
-            style: const TextStyle(
-                color: _accent,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                letterSpacing: 1),
-          ),
-          const SizedBox(height: 4),
-          Text(empresa,
-              style: const TextStyle(color: _textMuted, fontSize: 13)),
-          const SizedBox(height: 20),
-
-          // Rota
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF2E3340)),
-            ),
-            child: Column(
-              children: [
-                _RotaLinha(
-                    icon: Icons.radio_button_checked,
-                    label: 'ORIGEM',
-                    valor: c['origem'] ?? '—',
-                    cor: _green),
-                Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: Container(
-                      height: 24,
-                      width: 1,
-                      color: _textMuted.withOpacity(0.2)),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: () => _avaliarEmpresa(e),
+                icon: const Icon(Icons.star_outline, size: 16),
+                label: const Text('Avaliar empresa'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: _bg,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
-                _RotaLinha(
-                    icon: Icons.location_on,
-                    label: 'DESTINO',
-                    valor: c['destino'] ?? '—',
-                    cor: _red),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Métricas
-          Row(
-            children: [
-              _MetricBox(label: 'DISTÂNCIA', value: '$distancia km', color: _blue),
-              const SizedBox(width: 10),
-              _MetricBox(label: 'VALOR BRUTO', value: valor, color: _green),
-              const SizedBox(width: 10),
-              _MetricBox(label: 'PEDÁGIO', value: pedagio, color: _textMuted),
+              ),
             ],
           ),
         ],
@@ -402,7 +561,7 @@ Future<void> _carregarTudo() async {
 // ─── Card de carga disponível ─────────────────────────────────────────────
 class _CargaCard extends StatelessWidget {
   final Map<String, dynamic> carga;
-  final VoidCallback onAceitar;
+  final VoidCallback onCandidatar;
 
   static const _card = Color(0xFF23272F);
   static const _accent = Color(0xFFE8A020);
@@ -411,7 +570,7 @@ class _CargaCard extends StatelessWidget {
   static const _green = Color(0xFF4CAF7D);
   static const _blue = Color(0xFF5B8FBF);
 
-  const _CargaCard({required this.carga, required this.onAceitar});
+  const _CargaCard({required this.carga, required this.onCandidatar});
 
   @override
   Widget build(BuildContext context) {
@@ -541,7 +700,7 @@ class _CargaCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: onAceitar,
+                  onTap: onCandidatar,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 8),
@@ -550,7 +709,7 @@ class _CargaCard extends StatelessWidget {
                           colors: [Color(0xFFE8A020), Color(0xFFC07010)]),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text('ACEITAR',
+                    child: const Text('CANDIDATAR',
                         style: TextStyle(
                             color: Color(0xFF1A1D23),
                             fontWeight: FontWeight.w900,
@@ -652,5 +811,125 @@ class _MetricBox extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ─── Card de candidatura (status do pedido) ───────────────────────────────
+class _CandidaturaCard extends StatelessWidget {
+  final Map<String, dynamic> candidatura;
+
+  static const _card = Color(0xFF23272F);
+  static const _accent = Color(0xFFE8A020);
+  static const _textPrimary = Color(0xFFE8E0CC);
+  static const _textMuted = Color(0xFF8A8070);
+  static const _green = Color(0xFF4CAF7D);
+  static const _red = Color(0xFFCF6679);
+
+  const _CandidaturaCard({required this.candidatura});
+
+  @override
+  Widget build(BuildContext context) {
+    final titulo = candidatura['carga_titulo']?.toString() ?? 'Carga';
+    final status = candidatura['status']?.toString() ?? 'pendente';
+    final mensagem = candidatura['mensagem']?.toString() ?? '';
+    final (label, cor, icone, descricao) = _statusInfo(status);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cor.withOpacity(0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(titulo,
+                      style: const TextStyle(
+                          color: _textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: cor.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cor.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icone, size: 12, color: cor),
+                      const SizedBox(width: 4),
+                      Text(label,
+                          style: TextStyle(
+                              color: cor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(descricao,
+                style: const TextStyle(color: _textMuted, fontSize: 12)),
+            if (mensagem.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.chat_bubble_outline,
+                      size: 13, color: _textMuted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text('"$mensagem"',
+                        style: const TextStyle(
+                            color: _textMuted,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic)),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  (String, Color, IconData, String) _statusInfo(String status) {
+    switch (status) {
+      case 'aceita':
+        return (
+          'ACEITA',
+          _green,
+          Icons.check_circle,
+          'Você foi aceito! Confira a aba "Minha Viagem".'
+        );
+      case 'recusada':
+        return (
+          'RECUSADA',
+          _red,
+          Icons.cancel,
+          'A empresa escolheu outro motorista desta vez.'
+        );
+      default:
+        return (
+          'PENDENTE',
+          _accent,
+          Icons.hourglass_top,
+          'Aguardando a empresa analisar seu perfil.'
+        );
+    }
   }
 }
