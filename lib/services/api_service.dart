@@ -231,6 +231,34 @@ class ApiService {
     return response.statusCode == 200;
   }
 
+  /// Motorista confirma a carga que a empresa aprovou para ele.
+  /// A viagem passa para a etapa "Acoplar carreta".
+  static Future<Map<String, dynamic>> aceitarCarga(int cargaId) =>
+      _acaoDoMotorista(cargaId, 'aceitar');
+
+  /// Motorista acoplou a carreta e saiu para a estrada ("Em trânsito").
+  static Future<Map<String, dynamic>> iniciarViagem(int cargaId) =>
+      _acaoDoMotorista(cargaId, 'iniciar-viagem');
+
+  /// Motorista desiste da viagem; a carga volta para a lista de disponíveis.
+  static Future<Map<String, dynamic>> cancelarViagem(int cargaId) =>
+      _acaoDoMotorista(cargaId, 'cancelar');
+
+  static Future<Map<String, dynamic>> _acaoDoMotorista(
+    int cargaId,
+    String acao,
+  ) async {
+    final headers = await _authHeaders;
+    final response = await http
+        .post(Uri.parse('$baseUrl/fretes/cargas/$cargaId/$acao/'),
+            headers: headers)
+        .timeout(const Duration(seconds: 15));
+    return {
+      'statusCode': response.statusCode,
+      'body': response.body.isEmpty ? {} : jsonDecode(response.body),
+    };
+  }
+
   /// Empresa marca a carga como entregue/finalizada.
   static Future<bool> finalizarCarga(int cargaId) async {
     final headers = await _authHeaders;

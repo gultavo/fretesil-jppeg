@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../pages/avaliar_motorista_page.dart';
 import '../pages/candidatos_page.dart';
+import '../pages/detalhes_carga_page.dart';
 import '../pages/perfil_empresa_page.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../utils/status_labels.dart';
+import '../utils/tipo_carreta.dart';
 import '../widgets/app_ui.dart';
 
 class HomeEmpresa extends StatefulWidget {
@@ -53,10 +55,23 @@ class _HomeEmpresaState extends State<HomeEmpresa>
 
   List<dynamic> get _ativas =>
       _cargas.where((c) => c['status'] == 'disponivel').toList();
-  List<dynamic> get _emTransito =>
-      _cargas.where((c) => c['status'] == 'em_transito').toList();
+
+  /// Tudo que já tem motorista e ainda não foi entregue: aguardando o aceite,
+  /// buscando a carreta ou na estrada.
+  List<dynamic> get _emTransito => _cargas
+      .where((c) => const ['aguardando_aceite', 'acoplar_carreta', 'em_transito']
+          .contains(c['status']))
+      .toList();
   List<dynamic> get _finalizadas =>
       _cargas.where((c) => c['status'] == 'finalizado').toList();
+
+  Future<void> _verDetalhes(Map<String, dynamic> carga) async {
+    final mudou = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DetalhesCargaPage(carga: carga)),
+    );
+    if (mudou == true) _carregarCargas();
+  }
 
   Future<void> _verCandidatos(Map<String, dynamic> carga) async {
     final mudou = await Navigator.push(
@@ -242,6 +257,7 @@ class _HomeEmpresaState extends State<HomeEmpresa>
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (_, i) => _CargaEmpresaCard(
           carga: lista[i],
+          onDetalhes: () => _verDetalhes(lista[i]),
           onVerCandidatos: () => _verCandidatos(lista[i]),
           onFinalizar: () => _finalizar(lista[i]),
           onAvaliar: () => _avaliar(lista[i]),
@@ -254,12 +270,14 @@ class _HomeEmpresaState extends State<HomeEmpresa>
 /// Card de carga na visão da empresa.
 class _CargaEmpresaCard extends StatelessWidget {
   final Map<String, dynamic> carga;
+  final VoidCallback onDetalhes;
   final VoidCallback onVerCandidatos;
   final VoidCallback onFinalizar;
   final VoidCallback onAvaliar;
 
   const _CargaEmpresaCard({
     required this.carga,
+    required this.onDetalhes,
     required this.onVerCandidatos,
     required this.onFinalizar,
     required this.onAvaliar,
@@ -271,92 +289,137 @@ class _CargaEmpresaCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final visual = statusCarga(context, carga['status']?.toString());
     final motorista = carga['motorista_nome'] as String?;
+    final empresaDestino = carga['empresa_destino']?.toString().trim() ?? '';
 
     return Card(
-      child: Padding(
-        padding: AppSpacing.card,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    carga['titulo']?.toString() ?? 'Sem título',
-                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                AppStatusChip(
-                  label: visual.label,
-                  color: visual.color,
-                  icon: visual.icon,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            AppRouteLine(
-              origem: carga['origem']?.toString() ?? '—',
-              destino: carga['destino']?.toString() ?? '—',
-              distancia: Fmt.km(carga['distancia_km']),
-            ),
-
-            if (motorista != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+      child: InkWell(
+        onTap: onDetalhes,
+        borderRadius: AppRadius.brCard,
+        child: Padding(
+          padding: AppSpacing.card,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  Icon(Icons.person_outline,
-                      size: 14, color: cs.onSurfaceVariant),
-                  const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
-                      'Motorista: $motorista',
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      carga['titulo']?.toString() ?? 'Sem título',
+                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AppStatusChip(
+                    label: visual.label,
+                    color: visual.color,
+                    icon: visual.icon,
+                  ),
                 ],
               ),
-            ],
+              const SizedBox(height: AppSpacing.xs),
+              Row(
+                children: [
+                  Icon(TipoCarreta.iconeDe(carga),
+                      size: 13, color: cs.onSurfaceVariant),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    TipoCarreta.labelDe(carga),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
 
-            const SizedBox(height: AppSpacing.md),
-            Divider(color: cs.outlineVariant),
-            const SizedBox(height: AppSpacing.md),
+              AppRouteLine(
+                origem: carga['origem']?.toString() ?? '—',
+                destino: carga['destino']?.toString() ?? '—',
+                distancia: Fmt.km(carga['distancia_km']),
+              ),
 
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              if (empresaDestino.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Row(
                   children: [
-                    Text(
-                      'VALOR BRUTO',
-                      style: TextStyle(
-                        color: cs.onSurfaceVariant,
-                        fontSize: 9,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      Fmt.brl(carga['valor_bruto_frete']),
-                      style: TextStyle(
-                        color: cs.primary,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                    Icon(Icons.factory_outlined,
+                        size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        'Descarregar em: $empresaDestino',
+                        style:
+                            tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                const Spacer(),
-                _acao(context),
               ],
-            ),
-          ],
+
+              if (motorista != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Icon(Icons.person_outline,
+                        size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        'Motorista: $motorista',
+                        style:
+                            tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: AppSpacing.md),
+              Divider(color: cs.outlineVariant),
+              const SizedBox(height: AppSpacing.md),
+
+              Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'VALOR BRUTO',
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 9,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        Fmt.brl(carga['valor_bruto_frete']),
+                        style: TextStyle(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: onDetalhes,
+                    icon: const Icon(Icons.info_outline, size: 16),
+                    label: const Text('Detalhes'),
+                    style: AppCompactButton.outlined,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _acao(context),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -373,6 +436,20 @@ class _CargaEmpresaCard extends StatelessWidget {
           icon: const Icon(Icons.people_outline, size: 16),
           label: Text('Candidatos ($n)'),
           style: AppCompactButton.style,
+        );
+
+      case 'aguardando_aceite':
+        return AppStatusChip(
+          label: 'Aguardando motorista',
+          color: status.warning,
+          icon: Icons.hourglass_top,
+        );
+
+      case 'acoplar_carreta':
+        return AppStatusChip(
+          label: 'Buscando a carreta',
+          color: status.brand,
+          icon: Icons.rv_hookup_outlined,
         );
 
       case 'em_transito':

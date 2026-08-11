@@ -1,19 +1,55 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from usuario.models import Empresa, Caminhoneiro
 
 class Carga(models.Model):
+    # Etapas da viagem, na ordem em que acontecem:
+    # disponivel → (empresa aceita um candidato) → aguardando_aceite
+    #            → (motorista confirma)          → acoplar_carreta
+    #            → (motorista acopla e sai)      → em_transito
+    #            → (empresa confirma a entrega)  → finalizado
     STATUS_CHOICES = [
         ('disponivel', 'Disponível'),
+        ('aguardando_aceite', 'Aguardando aceite do motorista'),
+        ('acoplar_carreta', 'Acoplar carreta'),
         ('em_transito', 'Em Trânsito'),
-        ('finalizado', 'Finalizado'),
+        ('finalizado', 'Concluída'),
     ]
+
+    TIPO_CARRETA_CHOICES = [
+        ('sider', 'Sider'),
+        ('bau', 'Baú'),
+        ('carga_seca', 'Carga seca'),
+        ('graneleiro', 'Graneleiro'),
+        ('tanque', 'Tanque'),
+        ('camara_fria', 'Câmara fria'),
+        ('cacamba', 'Caçamba'),
+        ('prancha', 'Prancha'),
+        ('porta_container', 'Porta-contêiner'),
+        ('outro', 'Outro'),
+    ]
+
+    # Percentual que o app retém sobre o valor bruto do frete.
+    TAXA_COMISSAO = Decimal('0.002')  # 0,2%
 
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='cargas_postadas')
     titulo = models.CharField(max_length=100) # Ex: "Grãos de Soja - Curitiba p/ Santos"
     origem = models.CharField(max_length=255)
     destino = models.CharField(max_length=255)
+    empresa_destino = models.CharField(
+        max_length=255, blank=True,
+        help_text="Empresa onde a carga será descarregada"
+    )
+    local_carreta = models.CharField(
+        max_length=255, blank=True,
+        help_text="Onde a carreta está para o motorista acoplar"
+    )
+    tipo_carreta = models.CharField(
+        max_length=20, choices=TIPO_CARRETA_CHOICES, default='carga_seca'
+    )
     distancia_km = models.FloatField()
     descricao = models.TextField(blank=True)
 
@@ -42,9 +78,7 @@ class Carga(models.Model):
     empresa_avaliada = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        from decimal import Decimal
-        taxa = Decimal('0.01')
-        self.comissao_app = Decimal(str(self.valor_bruto_frete)) * taxa
+        self.comissao_app = Decimal(str(self.valor_bruto_frete)) * self.TAXA_COMISSAO
         super(Carga, self).save(*args, **kwargs)
 
     def __str__(self):
@@ -58,6 +92,7 @@ class Candidatura(models.Model):
         ('pendente', 'Pendente'),
         ('aceita', 'Aceita'),
         ('recusada', 'Recusada'),
+        ('cancelada', 'Cancelada pelo motorista'),
     ]
 
     carga = models.ForeignKey(Carga, on_delete=models.CASCADE, related_name='candidaturas')

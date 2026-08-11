@@ -58,21 +58,35 @@ class FluxoCompletoTests(APITestCase):
         r = self.client.post(f'/api/fretes/candidaturas/{cand_id}/aceitar/')
         self.assertEqual(r.status_code, 200, r.content)
         carga.refresh_from_db()
-        self.assertEqual(carga.status, 'em_transito')
+        self.assertEqual(carga.status, 'aguardando_aceite')
         self.assertEqual(carga.motorista_alocado, self.motorista)
 
-        # 4. Não pode avaliar antes de finalizar
+        # 4. Motorista confirma a carga e vai buscar a carreta
+        self.auth(self.mot_user)
+        r = self.client.post(f'/api/fretes/cargas/{carga_id}/aceitar/')
+        self.assertEqual(r.status_code, 200, r.content)
+        carga.refresh_from_db()
+        self.assertEqual(carga.status, 'acoplar_carreta')
+
+        # 5. Carreta acoplada: a carga entra em trânsito
+        r = self.client.post(f'/api/fretes/cargas/{carga_id}/iniciar-viagem/')
+        self.assertEqual(r.status_code, 200, r.content)
+        carga.refresh_from_db()
+        self.assertEqual(carga.status, 'em_transito')
+
+        # 6. Não pode avaliar antes de finalizar
+        self.auth(self.emp_user)
         r = self.client.post('/api/avaliacao/avaliar-caminhoneiro/', {
             'caminhoneiro': self.motorista.id, 'carga': carga_id, 'nota': 5, 'comentario': 'Ótimo'})
         self.assertEqual(r.status_code, 400, r.content)
 
-        # 5. Empresa finaliza a entrega
+        # 7. Empresa finaliza a entrega
         r = self.client.post(f'/api/fretes/cargas/{carga_id}/finalizar/')
         self.assertEqual(r.status_code, 200, r.content)
         carga.refresh_from_db()
         self.assertEqual(carga.status, 'finalizado')
 
-        # 6. Agora a empresa avalia o motorista (0-5 estrelas + comentário)
+        # 8. Agora a empresa avalia o motorista (0-5 estrelas + comentário)
         r = self.client.post('/api/avaliacao/avaliar-caminhoneiro/', {
             'caminhoneiro': self.motorista.id, 'carga': carga_id, 'nota': 5,
             'comentario': 'Excelente motorista, entrega no prazo.'})
@@ -81,12 +95,12 @@ class FluxoCompletoTests(APITestCase):
         self.assertEqual(self.motorista.media_notas, 5.0)
         self.assertEqual(self.motorista.total_avaliacoes, 1)
 
-        # 7. Não pode avaliar duas vezes a mesma entrega
+        # 9. Não pode avaliar duas vezes a mesma entrega
         r = self.client.post('/api/avaliacao/avaliar-caminhoneiro/', {
             'caminhoneiro': self.motorista.id, 'carga': carga_id, 'nota': 1, 'comentario': 'x'})
         self.assertEqual(r.status_code, 400, r.content)
 
-        # 8. Perfil público do motorista mostra a avaliação
+        # 10. Perfil público do motorista mostra a avaliação
         self.auth(self.mot_user)
         r = self.client.get(f'/api/usuario/motoristas/{self.motorista.id}/')
         self.assertEqual(r.status_code, 200, r.content)
@@ -160,6 +174,77 @@ class FluxoCompletoTests(APITestCase):
         self.auth(self.mot_user)  # motorista diferente tenta avaliar
         r = self.client.post('/api/avaliacao/blacklist/', {'carga': carga.id, 'nota': 5, 'comentario': 'ok'})
         self.assertEqual(r.status_code, 403, r.content)
+
+    def _carga_do_motorista(self, status):
+        """Carga já alocada a este motorista, na etapa indicada."""
+        return Carga.objects.create(
+            empresa=self.empresa, titulo='Viagem', origem='A', destino='B',
+            distancia_km=100, valor_bruto_frete='2000.00',
+            motorista_alocado=self.motorista, status=status)
+
+    def test_motorista_cancela_e_carga_volta_para_a_lista(self):
+        carga = self._carga_do_motorista('em_transito')
+        Candidatura.objects.create(
+            carga=carga, caminhoneiro=self.motorista, status='aceita')
+
+        self.auth(self.mot_user)
+        r = self.client.post(f'/api/fretes/cargas/{carga.id}/cancelar/')
+        self.assertEqual(r.status_code, 200, r.content)
+
+        carga.refresh_from_db()
+        self.assertEqual(carga.status, 'disponivel')
+        self.assertIsNone(carga.motorista_alocado)
+        self.assertEqual(
+            Candidatura.objects.get(carga=carga, caminhoneiro=self.motorista).status,
+            'cancelada')
+
+    def test_motorista_nao_cancela_carga_de_outro(self):
+        outro_user = User.objects.create_user('outro2@x.com', password='pass12345')
+        outro = Caminhoneiro.objects.create(
+            user=outro_user, nome_completo='Outro', cpf='99988877766',
+            placa_veiculo='ZZZ9Z99')
+        carga = Carga.objects.create(
+            empresa=self.empresa, titulo='Alheia', origem='A', destino='B',
+            distancia_km=100, valor_bruto_frete='1000.00',
+            motorista_alocado=outro, status='em_transito')
+
+        self.auth(self.mot_user)
+        r = self.client.post(f'/api/fretes/cargas/{carga.id}/cancelar/')
+        self.assertIn(r.status_code, (403, 404), r.content)
+        carga.refresh_from_db()
+        self.assertEqual(carga.status, 'em_transito')
+
+    def test_nao_inicia_viagem_sem_acoplar(self):
+        carga = self._carga_do_motorista('aguardando_aceite')
+        self.auth(self.mot_user)
+        r = self.client.post(f'/api/fretes/cargas/{carga.id}/iniciar-viagem/')
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_empresa_so_finaliza_carga_em_transito(self):
+        carga = self._carga_do_motorista('acoplar_carreta')
+        self.auth(self.emp_user)
+        r = self.client.post(f'/api/fretes/cargas/{carga.id}/finalizar/')
+        self.assertEqual(r.status_code, 400, r.content)
+
+    def test_comissao_do_app_e_de_02_por_cento(self):
+        carga = Carga.objects.create(
+            empresa=self.empresa, titulo='Comissão', origem='A', destino='B',
+            distancia_km=100, valor_bruto_frete='5000.00')
+        self.assertEqual(float(carga.comissao_app), 10.0)  # 0,2% de 5.000
+
+    def test_tipo_de_carreta_vai_e_volta_na_api(self):
+        self.auth(self.emp_user)
+        r = self.client.post('/api/fretes/cargas/', {
+            'titulo': 'Leite', 'origem': 'Castro', 'destino': 'Curitiba',
+            'distancia_km': 150, 'valor_bruto_frete': '1200.00',
+            'tipo_carreta': 'tanque', 'empresa_destino': 'Laticínios Y',
+            'local_carreta': 'Pátio da BR-277, km 12',
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data['tipo_carreta'], 'tanque')
+        self.assertEqual(r.data['tipo_carreta_display'], 'Tanque')
+        self.assertEqual(r.data['empresa_destino'], 'Laticínios Y')
+        self.assertEqual(r.data['local_carreta'], 'Pátio da BR-277, km 12')
 
     def test_nota_minima_bloqueia_candidatura(self):
         carga = Carga.objects.create(

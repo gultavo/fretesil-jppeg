@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/api_service.dart';
+import '../services/geo_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../utils/tipo_carreta.dart';
 import '../widgets/app_ui.dart';
 
 class NovaCargaPage extends StatefulWidget {
@@ -20,15 +22,19 @@ class NovaCargaPage extends StatefulWidget {
 class _NovaCargaPageState extends State<NovaCargaPage> {
   final _formKey = GlobalKey<FormState>();
   bool _enviando = false;
+  bool _calculandoDistancia = false;
 
   final _tituloCtrl = TextEditingController();
   final _origemCtrl = TextEditingController();
   final _destinoCtrl = TextEditingController();
+  final _empresaDestinoCtrl = TextEditingController();
+  final _localCarretaCtrl = TextEditingController();
   final _distanciaCtrl = TextEditingController();
   final _valorBrutoCtrl = TextEditingController();
   final _pedagioCtrl = TextEditingController();
   final _notaMinimaCtrl = TextEditingController(text: '0,0');
   final _descricaoCtrl = TextEditingController();
+  String _tipoCarreta = TipoCarreta.padrao;
   XFile? _foto;
 
   @override
@@ -37,6 +43,8 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
     _tituloCtrl.dispose();
     _origemCtrl.dispose();
     _destinoCtrl.dispose();
+    _empresaDestinoCtrl.dispose();
+    _localCarretaCtrl.dispose();
     _distanciaCtrl.dispose();
     _valorBrutoCtrl.dispose();
     _pedagioCtrl.dispose();
@@ -53,6 +61,9 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
         'titulo': _tituloCtrl.text.trim(),
         'origem': _origemCtrl.text.trim(),
         'destino': _destinoCtrl.text.trim(),
+        'empresa_destino': _empresaDestinoCtrl.text.trim(),
+        'local_carreta': _localCarretaCtrl.text.trim(),
+        'tipo_carreta': _tipoCarreta,
         'descricao': _descricaoCtrl.text.trim(),
         'distancia_km': Fmt.parseEntrada(_distanciaCtrl.text),
         'valor_bruto_frete': Fmt.parseEntrada(_valorBrutoCtrl.text),
@@ -81,6 +92,36 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
       if (mounted) AppSnack.error(context, e.toString());
     } finally {
       if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  /// Busca a distância rodoviária entre origem e destino no OpenStreetMap.
+  Future<void> _calcularDistancia() async {
+    setState(() => _calculandoDistancia = true);
+    try {
+      final r = await GeoService.distanciaEntre(
+        _origemCtrl.text,
+        _destinoCtrl.text,
+      );
+      if (!mounted) return;
+      _distanciaCtrl.text = r.km.toStringAsFixed(0);
+      if (r.aproximada) {
+        AppSnack.warning(
+          context,
+          'Rota indisponível agora — usamos uma estimativa. '
+          'Confira o valor antes de publicar.',
+        );
+      } else {
+        AppSnack.success(context, 'Distância encontrada: ${Fmt.km(r.km)}.');
+      }
+    } on GeoErro catch (e) {
+      if (mounted) AppSnack.error(context, e.mensagem);
+    } catch (_) {
+      if (mounted) {
+        AppSnack.error(context, 'Não foi possível calcular a distância.');
+      }
+    } finally {
+      if (mounted) setState(() => _calculandoDistancia = false);
     }
   }
 
@@ -178,12 +219,83 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
               ),
               const SizedBox(height: AppSpacing.md),
 
+              TextFormField(
+                controller: _empresaDestinoCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Empresa onde descarregar',
+                  hintText: 'Ex.: Distribuidora Santos Ltda.',
+                  prefixIcon: Icon(Icons.factory_outlined),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+
               _CampoNumerico(
                 controller: _distanciaCtrl,
                 label: 'Distância (km)',
                 hint: '0',
                 icon: Icons.straighten_outlined,
                 validator: (v) => _numeroObrigatorio(v, 'a distância'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _calculandoDistancia ? null : _calcularDistancia,
+                  icon: _calculandoDistancia
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.travel_explore_outlined, size: 18),
+                  label: Text(
+                    _calculandoDistancia
+                        ? 'Consultando o mapa…'
+                        : 'Calcular pelas cidades',
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ── Carreta ───────────────────────────────────────────────
+              const AppSectionHeader(
+                label: 'Carreta',
+                icon: Icons.rv_hookup_outlined,
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              DropdownButtonFormField<String>(
+                initialValue: _tipoCarreta,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de carreta',
+                  prefixIcon: Icon(Icons.local_shipping_outlined),
+                ),
+                items: [
+                  for (final t in TipoCarreta.todos)
+                    DropdownMenuItem(
+                      value: t.codigo,
+                      child: Row(
+                        children: [
+                          Icon(t.icone, size: 18),
+                          const SizedBox(width: AppSpacing.md),
+                          Text(t.label),
+                        ],
+                      ),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setState(() => _tipoCarreta = v ?? TipoCarreta.padrao),
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              TextFormField(
+                controller: _localCarretaCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Onde a carreta está',
+                  hintText: 'Endereço/pátio onde o motorista vai acoplar',
+                  prefixIcon: Icon(Icons.place_outlined),
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
 
@@ -354,6 +466,9 @@ class _FotoPicker extends StatelessWidget {
 
 /// Aviso da comissão do app, recalculado conforme o valor digitado.
 class _InfoComissao extends StatefulWidget {
+  /// Percentual retido pelo app — o mesmo `Carga.TAXA_COMISSAO` do backend.
+  static const taxa = 0.002; // 0,2%
+
   final TextEditingController valorCtrl;
 
   const _InfoComissao({required this.valorCtrl});
@@ -380,7 +495,8 @@ class _InfoComissaoState extends State<_InfoComissao> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final comissao = (Fmt.tryParseEntrada(widget.valorCtrl.text) ?? 0) * 0.01;
+    final comissao =
+        (Fmt.tryParseEntrada(widget.valorCtrl.text) ?? 0) * _InfoComissao.taxa;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -398,7 +514,7 @@ class _InfoComissaoState extends State<_InfoComissao> {
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
-              'Comissão do app (1%)',
+              'Comissão do app (0,2%)',
               style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
             ),
           ),

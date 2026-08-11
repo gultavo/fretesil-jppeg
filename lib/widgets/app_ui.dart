@@ -329,14 +329,24 @@ class AppRouteLine extends StatelessWidget {
 }
 
 /// Rota em bloco, com rótulos ORIGEM/DESTINO — para telas de detalhe.
+///
+/// [empresaDestino] aparece sob o destino: é a empresa onde a carga será
+/// descarregada. [distancia], quando informada, fica no fio que liga os dois
+/// pontos. [ampliado] aumenta os textos para a tela do motorista.
 class AppRouteBlock extends StatelessWidget {
   final String origem;
   final String destino;
+  final String? empresaDestino;
+  final String? distancia;
+  final bool ampliado;
 
   const AppRouteBlock({
     super.key,
     required this.origem,
     required this.destino,
+    this.empresaDestino,
+    this.distancia,
+    this.ampliado = false,
   });
 
   @override
@@ -350,18 +360,33 @@ class AppRouteBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _linha(context, Icons.radio_button_checked, 'ORIGEM', origem,
+            _linha(context, Icons.radio_button_checked, 'ORIGEM', origem, null,
                 status.success),
             Padding(
               padding: const EdgeInsets.only(left: 9),
-              child: Container(
-                height: AppSpacing.xxl,
-                width: 2,
-                color: cs.outlineVariant,
+              child: Row(
+                children: [
+                  Container(
+                    height: AppSpacing.xxl,
+                    width: 2,
+                    color: cs.outlineVariant,
+                  ),
+                  if (distancia != null) ...[
+                    const SizedBox(width: AppSpacing.lg),
+                    Text(
+                      distancia!,
+                      style: TextStyle(
+                        color: status.info,
+                        fontWeight: FontWeight.w700,
+                        fontSize: ampliado ? 15 : 13,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             _linha(context, Icons.location_on, 'DESTINO', destino,
-                status.danger),
+                empresaDestino, status.danger),
           ],
         ),
       ),
@@ -369,12 +394,14 @@ class AppRouteBlock extends StatelessWidget {
   }
 
   Widget _linha(BuildContext context, IconData icon, String label,
-      String valor, Color cor) {
+      String valor, String? complemento, Color cor) {
     final cs = Theme.of(context).colorScheme;
+    final extra = complemento?.trim() ?? '';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: cor),
+        Icon(icon, size: ampliado ? 24 : 20, color: cor),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
@@ -384,7 +411,7 @@ class AppRouteBlock extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: cs.onSurfaceVariant,
-                  fontSize: 9,
+                  fontSize: ampliado ? 11 : 9,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w700,
                 ),
@@ -395,9 +422,28 @@ class AppRouteBlock extends StatelessWidget {
                 style: TextStyle(
                   color: cs.onSurface,
                   fontWeight: FontWeight.w600,
-                  fontSize: 14,
+                  fontSize: ampliado ? 19 : 14,
                 ),
               ),
+              if (extra.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(Icons.factory_outlined,
+                        size: ampliado ? 16 : 13, color: cs.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        extra,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: ampliado ? 15 : 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -566,11 +612,18 @@ class AppErrorState extends StatelessWidget {
 }
 
 /// Botão principal de uma tela: largura total, altura fixa, estado de carga.
+///
+/// [grande] deixa o botão com altura e texto maiores — usado na tela do
+/// motorista, onde a ação precisa ser óbvia e fácil de acertar com o dedo.
+/// [cor] troca o fundo quando a ação tem cor semântica própria (avançar
+/// etapa, concluir).
 class AppPrimaryButton extends StatelessWidget {
   final String label;
   final String? loadingLabel;
   final IconData? icon;
   final bool loading;
+  final bool grande;
+  final Color? cor;
   final VoidCallback? onPressed;
 
   const AppPrimaryButton({
@@ -580,6 +633,8 @@ class AppPrimaryButton extends StatelessWidget {
     this.loadingLabel,
     this.icon,
     this.loading = false,
+    this.grande = false,
+    this.cor,
   });
 
   @override
@@ -587,8 +642,13 @@ class AppPrimaryButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final child = Text(loading ? (loadingLabel ?? label) : label);
     final style = FilledButton.styleFrom(
-      minimumSize: const Size.fromHeight(52),
-      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      backgroundColor: cor,
+      foregroundColor: cor == null ? null : Colors.white,
+      minimumSize: Size.fromHeight(grande ? 66 : 52),
+      textStyle: TextStyle(
+        fontSize: grande ? 19 : 15,
+        fontWeight: FontWeight.w700,
+      ),
     );
 
     if (loading) {
@@ -610,11 +670,60 @@ class AppPrimaryButton extends StatelessWidget {
       return FilledButton.icon(
         onPressed: onPressed,
         style: style,
-        icon: Icon(icon, size: 20),
+        icon: Icon(icon, size: grande ? 26 : 20),
         label: child,
       );
     }
     return FilledButton(onPressed: onPressed, style: style, child: child);
+  }
+}
+
+/// Faixa de aviso/instrução com ícone, na cor semântica indicada.
+///
+/// Usada para explicar em uma frase o que o motorista deve fazer agora.
+class AppInfoBanner extends StatelessWidget {
+  final String texto;
+  final IconData icone;
+  final Color cor;
+  final double tamanhoTexto;
+
+  const AppInfoBanner({
+    super.key,
+    required this.texto,
+    required this.icone,
+    required this.cor,
+    this.tamanhoTexto = 15,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.10),
+        borderRadius: AppRadius.brControl,
+        border: Border.all(color: cor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icone, size: 24, color: cor),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: tamanhoTexto,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

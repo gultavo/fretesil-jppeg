@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -22,8 +23,21 @@ class CargaViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'perfil_empresa'):
             return Carga.objects.filter(empresa=user.perfil_empresa)
         if hasattr(user, 'perfil_motorista'):
-            return Carga.objects.filter(status='disponivel')
+            # O motorista vê as cargas abertas e também as que são dele
+            # (para aceitar, acoplar, cancelar e consultar depois).
+            return Carga.objects.filter(
+                Q(status='disponivel') | Q(motorista_alocado=user.perfil_motorista)
+            )
         return Carga.objects.none()
+
+    def _minha_carga(self, request):
+        """Carga do motorista logado, garantindo que ela é mesmo dele."""
+        if not hasattr(request.user, 'perfil_motorista'):
+            raise PermissionDenied('Apenas motoristas.')
+        carga = self.get_object()
+        if carga.motorista_alocado != request.user.perfil_motorista:
+            raise PermissionDenied('Esta carga não é sua.')
+        return carga
 
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'perfil_empresa'):
@@ -32,15 +46,60 @@ class CargaViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='ativa')
     def ativa(self, request):
+        """Viagem em andamento do motorista, em qualquer etapa antes da entrega."""
         if not hasattr(request.user, 'perfil_motorista'):
             return Response({'erro': 'Apenas motoristas.'}, status=403)
         carga = Carga.objects.filter(
             motorista_alocado=request.user.perfil_motorista,
-            status='em_transito'
+            status__in=['aguardando_aceite', 'acoplar_carreta', 'em_transito'],
         ).first()
         if not carga:
             return Response(None, status=200)
         return Response(CargaSerializer(carga, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='aceitar')
+    def aceitar(self, request, pk=None):
+        """Motorista confirma a carga que a empresa aprovou para ele."""
+        carga = self._minha_carga(request)
+        if carga.status != 'aguardando_aceite':
+            return Response({'erro': 'Esta carga não está aguardando o seu aceite.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        carga.status = 'acoplar_carreta'
+        carga.save()
+        return Response({
+            'mensagem': 'Carga aceita! Vá buscar a carreta.',
+            'carga': CargaSerializer(carga, context={'request': request}).data,
+        })
+
+    @action(detail=True, methods=['post'], url_path='iniciar-viagem')
+    def iniciar_viagem(self, request, pk=None):
+        """Motorista acoplou a carreta e saiu para a estrada."""
+        carga = self._minha_carga(request)
+        if carga.status != 'acoplar_carreta':
+            return Response({'erro': 'A carreta precisa estar na etapa de acoplagem.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        carga.status = 'em_transito'
+        carga.save()
+        return Response({
+            'mensagem': 'Boa viagem! Carga em trânsito.',
+            'carga': CargaSerializer(carga, context={'request': request}).data,
+        })
+
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, pk=None):
+        """Motorista desiste da viagem; a carga volta a ficar disponível."""
+        carga = self._minha_carga(request)
+        if carga.status not in ['aguardando_aceite', 'acoplar_carreta', 'em_transito']:
+            return Response({'erro': 'Esta viagem não pode mais ser cancelada.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        motorista = request.user.perfil_motorista
+        carga.candidaturas.filter(caminhoneiro=motorista).update(status='cancelada')
+        carga.motorista_alocado = None
+        carga.consumo_veiculo_alocado = None
+        carga.status = 'disponivel'
+        carga.save()
+        return Response({'mensagem': 'Viagem cancelada. A carga voltou para a lista.'})
 
     @action(detail=False, methods=['get'], url_path='minhas-entregas')
     def minhas_entregas(self, request):
@@ -158,9 +217,9 @@ class CandidaturaViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'erro': 'Esta carga já não está disponível.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Aloca o motorista escolhido
+        # Aloca o motorista escolhido; ele ainda precisa confirmar a carga.
         carga.motorista_alocado = candidatura.caminhoneiro
-        carga.status = 'em_transito'
+        carga.status = 'aguardando_aceite'
         carga.save()
 
         candidatura.status = 'aceita'
@@ -169,7 +228,8 @@ class CandidaturaViewSet(viewsets.ReadOnlyModelViewSet):
         # Recusa automaticamente as demais candidaturas pendentes
         carga.candidaturas.filter(status='pendente').exclude(pk=candidatura.pk).update(status='recusada')
 
-        return Response({'mensagem': f'{candidatura.caminhoneiro.nome_completo} foi aceito para a carga!'})
+        return Response({'mensagem': f'{candidatura.caminhoneiro.nome_completo} foi aceito! '
+                                     f'Aguardando a confirmação do motorista.'})
 
     @action(detail=True, methods=['post'], url_path='recusar')
     def recusar(self, request, pk=None):

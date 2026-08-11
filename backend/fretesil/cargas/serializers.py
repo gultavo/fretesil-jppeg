@@ -6,18 +6,40 @@ class CargaSerializer(serializers.ModelSerializer):
     lucro_estimado = serializers.SerializerMethodField()
     empresa_nome = serializers.CharField(source='empresa.razao_social', read_only=True)
     empresa_logo = serializers.ImageField(source='empresa.logo', read_only=True)
-    motorista_nome = serializers.CharField(source='motorista_alocado.nome_completo', read_only=True)
+    empresa_telefone = serializers.CharField(source='empresa.telefone', read_only=True)
+    tipo_carreta_display = serializers.CharField(source='get_tipo_carreta_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     total_candidaturas = serializers.SerializerMethodField()
+
+    # Dados do motorista alocado — a empresa vê tudo isso no detalhe da carga
+    # em trânsito.
+    motorista_nome = serializers.CharField(source='motorista_alocado.nome_completo', read_only=True)
+    motorista_foto = serializers.ImageField(source='motorista_alocado.foto_perfil', read_only=True)
+    motorista_telefone = serializers.CharField(source='motorista_alocado.telefone', read_only=True)
+    motorista_cidade = serializers.CharField(source='motorista_alocado.cidade', read_only=True)
+    motorista_placa = serializers.CharField(source='motorista_alocado.placa_veiculo', read_only=True)
+    motorista_veiculo = serializers.CharField(source='motorista_alocado.tipo_veiculo', read_only=True)
+    motorista_experiencia = serializers.IntegerField(source='motorista_alocado.anos_experiencia', read_only=True)
+    motorista_media = serializers.FloatField(source='motorista_alocado.media_notas', read_only=True)
+    motorista_total_avaliacoes = serializers.IntegerField(
+        source='motorista_alocado.total_avaliacoes', read_only=True)
+    motorista_diamante = serializers.BooleanField(source='motorista_alocado.e_diamante', read_only=True)
 
     class Meta:
         model = Carga
         fields = [
-            'id', 'empresa', 'empresa_nome', 'empresa_logo', 'titulo', 'descricao',
-            'origem', 'destino', 'distancia_km', 'foto_carga',
+            'id', 'empresa', 'empresa_nome', 'empresa_logo', 'empresa_telefone',
+            'titulo', 'descricao', 'origem', 'destino', 'empresa_destino',
+            'local_carreta', 'tipo_carreta', 'tipo_carreta_display',
+            'distancia_km', 'foto_carga',
             'valor_bruto_frete', 'estimativa_pedagio', 'comissao_app',
-            'status', 'motorista_alocado', 'motorista_nome', 'motorista_avaliado',
+            'status', 'status_display', 'motorista_alocado', 'motorista_avaliado',
             'empresa_avaliada', 'nota_minima_motorista', 'consumo_veiculo_alocado',
             'lucro_estimado', 'data_publicacao', 'data_entrega', 'total_candidaturas',
+            'motorista_nome', 'motorista_foto', 'motorista_telefone',
+            'motorista_cidade', 'motorista_placa', 'motorista_veiculo',
+            'motorista_experiencia', 'motorista_media',
+            'motorista_total_avaliacoes', 'motorista_diamante',
         ]
         read_only_fields = [
             'empresa', 'comissao_app', 'status',
