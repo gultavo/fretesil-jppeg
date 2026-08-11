@@ -4,16 +4,10 @@ import '../pages/avaliar_motorista_page.dart';
 import '../pages/candidatos_page.dart';
 import '../pages/perfil_empresa_page.dart';
 import '../services/api_service.dart';
-<<<<<<< HEAD
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../utils/status_labels.dart';
 import '../widgets/app_ui.dart';
-=======
-import '../pages/candidatos_page.dart';
-import '../pages/avaliar_motorista_page.dart';
-import '../pages/perfil_empresa_page.dart';
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 
 class HomeEmpresa extends StatefulWidget {
   const HomeEmpresa({super.key});
@@ -55,59 +49,6 @@ class _HomeEmpresaState extends State<HomeEmpresa>
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
-  }
-
-  Future<void> _verCandidatos(Map<String, dynamic> carga) async {
-    final mudou = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CandidatosPage(
-          cargaId: carga['id'],
-          cargaTitulo: carga['titulo']?.toString() ?? 'Carga',
-        ),
-      ),
-    );
-    if (mudou == true) _carregarCargas();
-  }
-
-  Future<void> _finalizar(Map<String, dynamic> carga) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Finalizar entrega?'),
-        content: Text('Confirmar que "${carga['titulo']}" foi entregue? '
-            'Depois disso você poderá avaliar o motorista.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Finalizar')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    final sucesso = await ApiService.finalizarCarga(carga['id']);
-    if (!mounted) return;
-    if (sucesso) {
-      _carregarCargas();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Entrega finalizada!'), backgroundColor: Colors.green));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Não foi possível finalizar.'), backgroundColor: Colors.red));
-    }
-  }
-
-  Future<void> _avaliar(Map<String, dynamic> carga) async {
-    final feito = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AvaliarMotoristaPage(
-          cargaId: carga['id'],
-          caminhoneiroId: carga['motorista_alocado'],
-          caminhoneiroNome: carga['motorista_nome']?.toString() ?? 'Motorista',
-        ),
-      ),
-    );
-    if (feito == true) _carregarCargas();
   }
 
   List<dynamic> get _ativas =>
@@ -176,7 +117,6 @@ class _HomeEmpresaState extends State<HomeEmpresa>
     );
 
     return Scaffold(
-<<<<<<< HEAD
       appBar: AppBar(
         title: const AppBrandMark(subtitle: 'Painel da empresa'),
         titleSpacing: AppSpacing.lg,
@@ -187,99 +127,6 @@ class _HomeEmpresaState extends State<HomeEmpresa>
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PerfilEmpresaPage()),
-=======
-      backgroundColor: colorScheme.surfaceContainerLowest,
-      body: NestedScrollView(
-        headerSliverBuilder: (ctx, inner) => [
-          SliverAppBar(
-            expandedHeight: 180,
-            floating: false,
-            pinned: true,
-            backgroundColor: colorScheme.primaryContainer,
-            foregroundColor: colorScheme.onPrimaryContainer,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.business_outlined),
-                tooltip: 'Meu perfil',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PerfilEmpresaPage()),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout_outlined),
-                tooltip: 'Sair',
-                onPressed: () async {
-                  await ApiService.logout();
-                  if (mounted) {
-                    Navigator.pushNamedAndRemoveUntil(
-                        context, '/login', (r) => false);
-                  }
-                },
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.fromLTRB(16, 0, 16, 60),
-              title: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bem-vindo!',
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  Text(
-                    'Painel de controle',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colorScheme.onPrimaryContainer.withOpacity(0.7),
-                    ),
-                  ),
-                ],
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primaryContainer,
-                    ],
-                  ),
-                ),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 24),
-                    child: Icon(
-                      Icons.business,
-                      size: 100,
-                      color: colorScheme.onPrimaryContainer.withOpacity(0.08),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: TabBar(
-                controller: _tabController,
-                labelColor: colorScheme.onPrimaryContainer,
-                unselectedLabelColor:
-                    colorScheme.onPrimaryContainer.withOpacity(0.6),
-                indicatorColor: colorScheme.onPrimaryContainer,
-                indicatorWeight: 3,
-                tabs: [
-                  Tab(text: 'Ativas (${_ativas.length})'),
-                  Tab(text: 'Em Trânsito (${_emTransito.length})'),
-                  Tab(text: 'Concluídas (${_finalizadas.length})'),
-                ],
-              ),
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
             ),
           ),
           IconButton(
@@ -392,63 +239,12 @@ class _HomeEmpresaState extends State<HomeEmpresa>
       child: ListView.separated(
         padding: AppSpacing.list,
         itemCount: lista.length,
-<<<<<<< HEAD
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (_, i) => _CargaEmpresaCard(
-=======
-        itemBuilder: (ctx, i) => _EmpresaCargaCard(
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
           carga: lista[i],
           onVerCandidatos: () => _verCandidatos(lista[i]),
           onFinalizar: () => _finalizar(lista[i]),
           onAvaliar: () => _avaliar(lista[i]),
-<<<<<<< HEAD
-=======
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Chip de estatística ──────────────────────────────────────────────────
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatChip(
-      {required this.label,
-      required this.value,
-      required this.icon,
-      required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(height: 6),
-            Text(value,
-                style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16)),
-            Text(label,
-                style: TextStyle(
-                    color: color.withOpacity(0.7),
-                    fontSize: 10)),
-          ],
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
         ),
       ),
     );
@@ -462,11 +258,7 @@ class _CargaEmpresaCard extends StatelessWidget {
   final VoidCallback onFinalizar;
   final VoidCallback onAvaliar;
 
-<<<<<<< HEAD
   const _CargaEmpresaCard({
-=======
-  const _EmpresaCargaCard({
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
     required this.carga,
     required this.onVerCandidatos,
     required this.onFinalizar,
@@ -561,11 +353,7 @@ class _CargaEmpresaCard extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-<<<<<<< HEAD
                 _acao(context),
-=======
-                _buildAcao(context, status),
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
               ],
             ),
           ],
@@ -574,80 +362,10 @@ class _CargaEmpresaCard extends StatelessWidget {
     );
   }
 
-<<<<<<< HEAD
   Widget _acao(BuildContext context) {
     final status = AppStatusColors.of(context);
 
     switch (carga['status']) {
-=======
-  Widget _buildAcao(BuildContext context, String status) {
-    final style = OutlinedButton.styleFrom(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      minimumSize: Size.zero,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      textStyle: const TextStyle(fontSize: 12),
-    );
-
-    if (status == 'disponivel') {
-      final n = carga['total_candidaturas'] ?? 0;
-      return FilledButton.tonalIcon(
-        onPressed: onVerCandidatos,
-        icon: const Icon(Icons.people_outline, size: 16),
-        label: Text('Candidatos ($n)'),
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      );
-    }
-
-    if (status == 'em_transito') {
-      return FilledButton.icon(
-        onPressed: onFinalizar,
-        icon: const Icon(Icons.check_circle_outline, size: 16),
-        label: const Text('Finalizar'),
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      );
-    }
-
-    // finalizado
-    final temMotorista = carga['motorista_alocado'] != null;
-    final avaliado = carga['motorista_avaliado'] == true;
-    if (temMotorista && !avaliado) {
-      return FilledButton.icon(
-        onPressed: onAvaliar,
-        icon: const Icon(Icons.star_outline, size: 16),
-        label: const Text('Avaliar'),
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFE8A020),
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-      );
-    }
-    if (temMotorista && avaliado) {
-      return const Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.verified, size: 16, color: Colors.green),
-        SizedBox(width: 4),
-        Text('Avaliado', style: TextStyle(color: Colors.green, fontSize: 12)),
-      ]);
-    }
-    return OutlinedButton(onPressed: null, style: style, child: const Text('Concluído'));
-  }
-
-  (String, Color) _statusInfo(String status, ColorScheme cs) {
-    switch (status) {
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
       case 'disponivel':
         final n = carga['total_candidaturas'] ?? 0;
         return FilledButton.tonalIcon(

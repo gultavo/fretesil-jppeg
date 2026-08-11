@@ -1,16 +1,10 @@
 import 'dart:io';
-<<<<<<< HEAD
 
-=======
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-<<<<<<< HEAD
 
-=======
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
@@ -33,11 +27,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
   final _distanciaCtrl = TextEditingController();
   final _valorBrutoCtrl = TextEditingController();
   final _pedagioCtrl = TextEditingController();
-<<<<<<< HEAD
   final _notaMinimaCtrl = TextEditingController(text: '0,0');
-=======
-  final _notaMinimaCtrl = TextEditingController(text: '0.0');
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
   final _descricaoCtrl = TextEditingController();
   XFile? _foto;
 
@@ -72,33 +62,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
             Fmt.tryParseEntrada(_notaMinimaCtrl.text) ?? 0.0,
       };
 
-<<<<<<< HEAD
       final result = await ApiService.criarCarga(dados, foto: _foto);
-=======
-      // helper para converter "1.500,00" → 1500.0
-      double _toDouble(String v) =>
-          double.parse(v.trim().replaceAll('.', '').replaceAll(',', '.'));
-
-      try {
-        final dados = {
-          'titulo': _tituloCtrl.text.trim(),
-          'origem': _origemCtrl.text.trim(),
-          'destino': _destinoCtrl.text.trim(),
-          'descricao': _descricaoCtrl.text.trim(),
-          'distancia_km': _toDouble(_distanciaCtrl.text),
-          'valor_bruto_frete': _toDouble(_valorBrutoCtrl.text),
-          'estimativa_pedagio': _pedagioCtrl.text.trim().isEmpty
-              ? 0.0
-              : _toDouble(_pedagioCtrl.text),
-          'nota_minima_motorista': _notaMinimaCtrl.text.trim().isEmpty
-              ? 0.0
-              : _toDouble(_notaMinimaCtrl.text),
-        };
-
-      final result = await ApiService.criarCarga(dados, foto: _foto);
-      print('RESPONSE: ${result['body']}'); // ← F12 → Console
-      print('STATUS: ${result['statusCode']}');
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
       if (!mounted) return;
 
       if (result['statusCode'] == 201) {
@@ -130,7 +94,6 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
     final status = AppStatusColors.of(context);
 
     return Scaffold(
@@ -145,164 +108,6 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
               const AppSectionHeader(
                 label: 'Informações da carga',
                 icon: Icons.inventory_2_outlined,
-=======
-    final cs = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
-      appBar: AppBar(
-        title: const Text('Nova Carga'),
-        backgroundColor: cs.primaryContainer,
-        foregroundColor: cs.onPrimaryContainer,
-        elevation: 0,
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ── Seção: Informações básicas ────────────────────────────
-            _SectionHeader(label: 'Informações da Carga', icon: Icons.inventory_2_outlined),
-            const SizedBox(height: 12),
-
-            _CampoTexto(
-              controller: _tituloCtrl,
-              label: 'Título',
-              hint: 'Ex: Grãos de Soja — Curitiba p/ Santos',
-              icon: Icons.label_outline,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null,
-            ),
-            const SizedBox(height: 12),
-
-            _CampoTexto(
-              controller: _descricaoCtrl,
-              label: 'Descrição (opcional)',
-              hint: 'Detalhes da carga, requisitos, etc.',
-              icon: Icons.notes_outlined,
-            ),
-            const SizedBox(height: 12),
-
-            _FotoPicker(
-              foto: _foto,
-              onPick: () async {
-                final img = await ImagePicker().pickImage(
-                    source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
-                if (img != null) setState(() => _foto = img);
-              },
-              onClear: () => setState(() => _foto = null),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Seção: Rota ───────────────────────────────────────────
-            _SectionHeader(label: 'Rota', icon: Icons.route_outlined),
-            const SizedBox(height: 12),
-
-            _CampoTexto(
-              controller: _origemCtrl,
-              label: 'Origem',
-              hint: 'Cidade, Estado',
-              icon: Icons.radio_button_checked,
-              iconColor: Colors.green,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Informe a origem' : null,
-            ),
-            const SizedBox(height: 12),
-
-            _CampoTexto(
-              controller: _destinoCtrl,
-              label: 'Destino',
-              hint: 'Cidade, Estado',
-              icon: Icons.location_on,
-              iconColor: Colors.red,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Informe o destino' : null,
-            ),
-            const SizedBox(height: 12),
-
-            _CampoNumerico(
-              controller: _distanciaCtrl,
-              label: 'Distância (km)',
-              hint: '0',
-              icon: Icons.straighten_outlined,
-              decimal: false,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Informe a distância';
-                if (double.tryParse(v) == null) return 'Número inválido';
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-
-            // ── Seção: Valores ────────────────────────────────────────
-            _SectionHeader(label: 'Valores', icon: Icons.attach_money),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _CampoNumerico(
-                    controller: _valorBrutoCtrl,
-                    label: 'Valor bruto (R\$)',
-                    hint: '0,00',
-                    icon: Icons.payments_outlined,
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Informe o valor';
-                      if (double.tryParse(v) == null) return 'Número inválido';
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CampoNumerico(
-                    controller: _pedagioCtrl,
-                    label: 'Estimativa pedágio (R\$)',
-                    hint: '0,00',
-                    icon: Icons.toll_outlined,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Comissão calculada automaticamente
-            _InfoComissao(valorCtrl: _valorBrutoCtrl),
-            const SizedBox(height: 20),
-
-            // ── Seção: Requisitos ─────────────────────────────────────
-            _SectionHeader(label: 'Requisitos', icon: Icons.star_outline),
-            const SizedBox(height: 12),
-
-            _CampoNumerico(
-              controller: _notaMinimaCtrl,
-              label: 'Nota mínima do motorista (0.0 – 5.0)',
-              hint: '0.0',
-              icon: Icons.star_half_outlined,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return null;
-                final n = double.tryParse(v);
-                if (n == null) return 'Número inválido';
-                if (n < 0 || n > 5) return 'Entre 0.0 e 5.0';
-                return null;
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // ── Botão salvar ──────────────────────────────────────────
-            FilledButton.icon(
-              onPressed: _enviando ? null : _salvar,
-              icon: _enviando
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.publish_outlined),
-              label: Text(_enviando ? 'Publicando...' : 'Publicar Carga'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-                textStyle: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
               ),
               const SizedBox(height: AppSpacing.md),
 
@@ -486,33 +291,22 @@ class _CampoNumerico extends StatelessWidget {
   }
 }
 
-<<<<<<< HEAD
 /// Seletor da foto da carga.
-=======
-// ─── Seletor de foto da carga ─────────────────────────────────────────────
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 class _FotoPicker extends StatelessWidget {
   final XFile? foto;
   final VoidCallback onPick;
   final VoidCallback onClear;
 
-<<<<<<< HEAD
   const _FotoPicker({
     required this.foto,
     required this.onPick,
     required this.onClear,
   });
-=======
-  const _FotoPicker({required this.foto, required this.onPick, required this.onClear});
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-<<<<<<< HEAD
 
-=======
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
     if (foto == null) {
       return OutlinedButton.icon(
         onPressed: onPick,
@@ -520,7 +314,6 @@ class _FotoPicker extends StatelessWidget {
         label: const Text('Adicionar foto da carga'),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-<<<<<<< HEAD
         ),
       );
     }
@@ -560,43 +353,6 @@ class _FotoPicker extends StatelessWidget {
 }
 
 /// Aviso da comissão do app, recalculado conforme o valor digitado.
-=======
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-    final provider = kIsWeb
-        ? NetworkImage(foto!.path)
-        : FileImage(File(foto!.path)) as ImageProvider;
-    return Stack(children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image(
-          image: provider,
-          height: 160,
-          width: double.infinity,
-          fit: BoxFit.cover,
-        ),
-      ),
-      Positioned(
-        top: 6,
-        right: 6,
-        child: CircleAvatar(
-          backgroundColor: cs.surface,
-          radius: 16,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(Icons.close, size: 18, color: cs.error),
-            onPressed: onClear,
-          ),
-        ),
-      ),
-    ]);
-  }
-}
-
-// ─── Card de comissão calculada ───────────────────────────────────────────
->>>>>>> 645521c15e0b2b5b2e92297907b72bf3b3e4ab05
 class _InfoComissao extends StatefulWidget {
   final TextEditingController valorCtrl;
 
