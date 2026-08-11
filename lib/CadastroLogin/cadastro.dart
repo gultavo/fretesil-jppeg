@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/app_ui.dart';
 
 class PaginaCadastro extends StatefulWidget {
   const PaginaCadastro({super.key});
@@ -11,6 +14,7 @@ class PaginaCadastro extends StatefulWidget {
 class _PaginaCadastroState extends State<PaginaCadastro> {
   String _tipoSelecionado = 'empresa';
   bool _carregando = false;
+  bool _senhaVisivel = false;
 
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
@@ -19,6 +23,8 @@ class _PaginaCadastroState extends State<PaginaCadastro> {
   final _cpfController = TextEditingController();
   final _placaController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  bool get _ehEmpresa => _tipoSelecionado == 'empresa';
 
   @override
   void dispose() {
@@ -36,53 +42,39 @@ class _PaginaCadastroState extends State<PaginaCadastro> {
     setState(() => _carregando = true);
 
     try {
-      late Map<String, dynamic> resultado;
-
-      if (_tipoSelecionado == 'empresa') {
-        resultado = await ApiService.cadastrarEmpresa({
-          'razao_social': _nomeController.text.trim(),
-          'cnpj': _cnpjController.text.trim().replaceAll(RegExp(r'\D'), ''),
-          'email': _emailController.text.trim(),
-          'senha': _senhaController.text,
-        });
-      } else {
-        resultado = await ApiService.cadastrarCaminhoneiro({
-          'nome_completo': _nomeController.text.trim(),
-          'cpf': _cpfController.text.trim().replaceAll(RegExp(r'\D'), ''),
-          'placa_veiculo': _placaController.text.trim().toUpperCase(),
-          'email': _emailController.text.trim(),
-          'senha': _senhaController.text,
-        });
-      }
+      final resultado = _ehEmpresa
+          ? await ApiService.cadastrarEmpresa({
+              'razao_social': _nomeController.text.trim(),
+              'cnpj':
+                  _cnpjController.text.trim().replaceAll(RegExp(r'\D'), ''),
+              'email': _emailController.text.trim(),
+              'senha': _senhaController.text,
+            })
+          : await ApiService.cadastrarCaminhoneiro({
+              'nome_completo': _nomeController.text.trim(),
+              'cpf': _cpfController.text.trim().replaceAll(RegExp(r'\D'), ''),
+              'placa_veiculo': _placaController.text.trim().toUpperCase(),
+              'email': _emailController.text.trim(),
+              'senha': _senhaController.text,
+            });
 
       if (!mounted) return;
 
       if (resultado['statusCode'] == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cadastro realizado! Faça login para continuar.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppSnack.success(context, 'Cadastro realizado! Faça login para continuar.');
         Navigator.pushReplacementNamed(context, '/login');
       } else {
         final erros = resultado['body'] as Map<String, dynamic>;
         final mensagem = erros.values
             .map((v) => v is List ? v.join(', ') : v.toString())
             .join('\n');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagem), backgroundColor: Colors.red),
-        );
+        AppSnack.error(context, mensagem);
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Erro de conexão. Servidor: ${ApiService.baseUrl}',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      AppSnack.error(
+        context,
+        'Erro de conexão com o servidor (${ApiService.baseUrl}).',
       );
     } finally {
       if (mounted) setState(() => _carregando = false);
@@ -91,241 +83,166 @@ class _PaginaCadastroState extends State<PaginaCadastro> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLowest,
-      appBar: AppBar(
-        title: const Text('Criar conta'),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: colorScheme.onSurface,
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              'Cadastre-se!',
-              textAlign: TextAlign.center,
-              style: textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+      appBar: AppBar(title: const Text('Criar conta')),
+      body: AppBody(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: AppSpacing.page,
+            children: [
+              const SizedBox(height: AppSpacing.sm),
+              const AppPageIntro(
+                title: 'Cadastre-se!',
+                subtitle: 'Preencha os dados abaixo para começar.',
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Preencha os dados abaixo para começar.',
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium
-                  ?.copyWith(color: colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 28),
+              const SizedBox(height: AppSpacing.xxl),
 
-            Text('Tipo de conta',
-                style: textTheme.labelLarge
-                    ?.copyWith(color: colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'empresa',
-                  label: Text('Empresa'),
-                  icon: Icon(Icons.business_outlined),
-                ),
-                ButtonSegment(
-                  value: 'freteiro',
-                  label: Text('Freteiro'),
-                  icon: Icon(Icons.local_shipping_outlined),
-                ),
-              ],
-              selected: {_tipoSelecionado},
-              onSelectionChanged: (s) =>
-                  setState(() => _tipoSelecionado = s.first),
-              style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: colorScheme.primaryContainer,
-                selectedForegroundColor: colorScheme.onPrimaryContainer,
+              const AppSectionHeader(
+                label: 'Tipo de conta',
+                icon: Icons.switch_account_outlined,
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // Card dados principais
-            _buildCard(
-              title: _tipoSelecionado == 'empresa'
-                  ? 'Dados da empresa'
-                  : 'Dados do freteiro',
-              children: [
-                TextFormField(
-                  controller: _nomeController,
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Campo obrigatório' : null,
-                  decoration: InputDecoration(
-                    labelText: _tipoSelecionado == 'empresa'
-                        ? 'Razão Social'
-                        : 'Nome completo',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLow,
+              const SizedBox(height: AppSpacing.md),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'empresa',
+                    label: Text('Empresa'),
+                    icon: Icon(Icons.business_outlined),
                   ),
-                ),
-                const SizedBox(height: 12),
-                if (_tipoSelecionado == 'empresa') ...[
+                  ButtonSegment(
+                    value: 'freteiro',
+                    label: Text('Freteiro'),
+                    icon: Icon(Icons.local_shipping_outlined),
+                  ),
+                ],
+                selected: {_tipoSelecionado},
+                onSelectionChanged: (s) =>
+                    setState(() => _tipoSelecionado = s.first),
+              ),
+              const SizedBox(height: AppSpacing.xxl),
+
+              AppSection(
+                title: _ehEmpresa ? 'Dados da empresa' : 'Dados do freteiro',
+                children: [
                   TextFormField(
-                    controller: _cnpjController,
-                    keyboardType: TextInputType.number,
+                    controller: _nomeController,
                     validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Informe o CNPJ' : null,
+                        (v == null || v.isEmpty) ? 'Campo obrigatório' : null,
                     decoration: InputDecoration(
-                      labelText: 'CNPJ (somente números)',
-                      prefixIcon: const Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerLow,
+                      labelText: _ehEmpresa ? 'Razão social' : 'Nome completo',
+                      prefixIcon: const Icon(Icons.person_outline),
                     ),
                   ),
-                ] else ...[
+                  const SizedBox(height: AppSpacing.md),
+                  if (_ehEmpresa)
+                    TextFormField(
+                      controller: _cnpjController,
+                      keyboardType: TextInputType.number,
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Informe o CNPJ' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'CNPJ',
+                        hintText: 'Somente números',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                      ),
+                    )
+                  else ...[
+                    TextFormField(
+                      controller: _cpfController,
+                      keyboardType: TextInputType.number,
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Informe o CPF' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'CPF',
+                        hintText: 'Somente números',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextFormField(
+                      controller: _placaController,
+                      textCapitalization: TextCapitalization.characters,
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Informe a placa' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Placa do veículo',
+                        prefixIcon: Icon(Icons.directions_car_outlined),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              AppSection(
+                title: 'Dados de acesso',
+                children: [
                   TextFormField(
-                    controller: _cpfController,
-                    keyboardType: TextInputType.number,
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                     validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Informe o CPF' : null,
-                    decoration: InputDecoration(
-                      labelText: 'CPF (somente números)',
-                      prefixIcon: const Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerLow,
+                        (v == null || v.isEmpty) ? 'Informe o e-mail' : null,
+                    decoration: const InputDecoration(
+                      labelText: 'E-mail',
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextFormField(
-                    controller: _placaController,
-                    textCapitalization: TextCapitalization.characters,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Informe a placa' : null,
+                    controller: _senhaController,
+                    obscureText: !_senhaVisivel,
+                    validator: (v) => (v == null || v.length < 6)
+                        ? 'A senha deve ter ao menos 6 caracteres'
+                        : null,
                     decoration: InputDecoration(
-                      labelText: 'Placa do veículo',
-                      prefixIcon:
-                          const Icon(Icons.directions_car_outlined),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerLow,
+                      labelText: 'Senha',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip:
+                            _senhaVisivel ? 'Ocultar senha' : 'Mostrar senha',
+                        icon: Icon(
+                          _senhaVisivel
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () =>
+                            setState(() => _senhaVisivel = !_senhaVisivel),
+                      ),
                     ),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Card dados de acesso
-            _buildCard(
-              title: 'Dados de acesso',
-              children: [
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Informe o e-mail' : null,
-                  decoration: InputDecoration(
-                    labelText: 'E-mail',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLow,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _senhaController,
-                  obscureText: true,
-                  validator: (v) => (v == null || v.length < 6)
-                      ? 'Senha deve ter ao menos 6 caracteres'
-                      : null,
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLow,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-
-            FilledButton(
-              onPressed: _carregando ? null : _cadastrar,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
               ),
-              child: _carregando
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: Colors.white),
-                    )
-                  : const Text('Criar conta',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('Já tem uma conta? ',
-                    style: TextStyle(color: colorScheme.onSurfaceVariant)),
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/login'),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('Entrar'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: AppSpacing.xxl),
 
-  Widget _buildCard(
-      {required String title, required List<Widget> children}) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      elevation: 0,
-      color: colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            ...children,
-          ],
+              AppPrimaryButton(
+                label: 'Criar conta',
+                loadingLabel: 'Criando…',
+                icon: Icons.person_add_alt,
+                loading: _carregando,
+                onPressed: _cadastrar,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Já tem uma conta?',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, '/login'),
+                    style: AppCompactButton.text,
+                    child: const Text('Entrar'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

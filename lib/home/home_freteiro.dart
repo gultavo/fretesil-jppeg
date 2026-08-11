@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
+
+import '../pages/avaliar_empresa_page.dart';
+import '../pages/perfil_empresa_page.dart';
+import '../pages/perfil_motorista_page.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../utils/status_labels.dart';
+import '../widgets/app_ui.dart';
 
 class HomeFreteiro extends StatefulWidget {
   const HomeFreteiro({super.key});
@@ -11,24 +19,17 @@ class HomeFreteiro extends StatefulWidget {
 class _HomeFreteiroState extends State<HomeFreteiro>
     with SingleTickerProviderStateMixin {
   List<dynamic> _disponiveis = [];
+  List<dynamic> _candidaturas = [];
+  List<dynamic> _entregas = [];
   Map<String, dynamic>? _cargaAtiva;
   bool _carregando = true;
   String? _erro;
   late TabController _tabController;
 
-  static const _bg = Color(0xFF1A1D23);
-  static const _card = Color(0xFF23272F);
-  static const _accent = Color(0xFFE8A020);
-  static const _textPrimary = Color(0xFFE8E0CC);
-  static const _textMuted = Color(0xFF8A8070);
-  static const _green = Color(0xFF4CAF7D);
-  static const _blue = Color(0xFF5B8FBF);
-  static const _red = Color(0xFFCF6679);
-
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _carregarTudo();
   }
 
@@ -38,156 +39,134 @@ class _HomeFreteiroState extends State<HomeFreteiro>
     super.dispose();
   }
 
-Future<void> _carregarTudo() async {
-  setState(() { _carregando = true; _erro = null; });
-  try {
-    final lista = await ApiService.listarCargasDisponiveis();
-    final ativa = await ApiService.cargaAtiva();
-    if (mounted) {
-      setState(() {
-        _disponiveis = lista;
-        _cargaAtiva = ativa;
-      });
+  Future<void> _carregarTudo() async {
+    setState(() {
+      _carregando = true;
+      _erro = null;
+    });
+    try {
+      final lista = await ApiService.listarCargasDisponiveis();
+      final ativa = await ApiService.cargaAtiva();
+      final candidaturas = await ApiService.minhasCandidaturas();
+      final entregas = await ApiService.minhasEntregas();
+      if (mounted) {
+        setState(() {
+          _disponiveis = lista;
+          _cargaAtiva = ativa;
+          _candidaturas = candidaturas;
+          _entregas = entregas;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _erro = e.toString());
+    } finally {
+      if (mounted) setState(() => _carregando = false);
     }
-  } catch (e, stack) {
-    print('ERRO: $e');
-    print('STACK: $stack');
-    if (mounted) setState(() => _erro = e.toString());
-  } finally {
-    if (mounted) setState(() => _carregando = false);
   }
-}
 
-  Future<void> _aceitarCarga(Map<String, dynamic> carga) async {
-    final confirmou = await _confirmar(
-      titulo: 'Aceitar carga?',
-      mensagem:
-          '${carga['titulo']}\n${carga['origem']} → ${carga['destino']}\n\nVocê ficará alocado até a entrega.',
+  List<dynamic> get _pendentes =>
+      _candidaturas.where((c) => c['status'] == 'pendente').toList();
+  List<dynamic> get _aAvaliar =>
+      _entregas.where((e) => e['empresa_avaliada'] != true).toList();
+
+  Future<void> _candidatar(Map<String, dynamic> carga) async {
+    final ok = await appConfirmar(
+      context,
+      titulo: 'Candidatar-se a esta carga?',
+      mensagem: '${carga['titulo']}\n'
+          '${carga['origem']} → ${carga['destino']}\n\n'
+          'A empresa vai analisar seu perfil e decidir se aceita você.',
+      confirmar: 'Candidatar',
     );
-    if (confirmou != true) return;
+    if (!ok || !mounted) return;
 
-    final ok = await ApiService.aceitarCarga(carga['id']);
+    final res = await ApiService.candidatarCarga(carga['id']);
     if (!mounted) return;
 
-    if (ok) {
-      setState(() {
-        _cargaAtiva = carga;
-        _disponiveis.remove(carga);
-      });
-      _tabController.animateTo(1);
-      _snack('Carga aceita! Boa viagem! 🚛', _green);
+    if (res['statusCode'] == 201) {
+      AppSnack.success(
+          context, 'Candidatura enviada! Aguarde a resposta da empresa.');
+      _carregarTudo();
     } else {
-      _snack('Não foi possível aceitar esta carga.', _red);
+      final body = res['body'];
+      AppSnack.error(
+        context,
+        body is Map && body['erro'] != null
+            ? body['erro'].toString()
+            : 'Não foi possível se candidatar.',
+      );
     }
   }
 
-  Future<bool?> _confirmar({required String titulo, required String mensagem}) {
-    return showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: _card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: _accent),
+  Future<void> _avaliarEmpresa(Map<String, dynamic> carga) async {
+    final feito = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AvaliarEmpresaPage(
+          cargaId: carga['id'],
+          empresaNome: carga['empresa_nome']?.toString() ?? 'Empresa',
         ),
-        title: Text(titulo,
-            style: const TextStyle(color: _textPrimary, fontWeight: FontWeight.bold)),
-        content: Text(mensagem, style: const TextStyle(color: _textMuted)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar', style: TextStyle(color: _textMuted)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _accent, foregroundColor: _bg),
-            child: const Text('Confirmar',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
+    if (feito == true) _carregarTudo();
   }
 
-  void _snack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
+  void _verPerfilEmpresa(dynamic empresaId) {
+    if (empresaId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PerfilEmpresaPage(empresaId: empresaId),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final status = AppStatusColors.of(context);
+
     return Scaffold(
-      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F1115),
-        foregroundColor: _textPrimary,
-        elevation: 0,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _accent.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: _accent.withOpacity(0.4)),
-              ),
-              child: const Icon(Icons.local_shipping, color: _accent, size: 18),
-            ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('FRETE SIL',
-                    style: TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        letterSpacing: 2)),
-                Text('CENTRAL DE CARGAS',
-                    style: TextStyle(
-                        color: _textMuted, fontSize: 9, letterSpacing: 1.5)),
-              ],
-            ),
-          ],
-        ),
+        title: const AppBrandMark(subtitle: 'Central de cargas'),
+        titleSpacing: AppSpacing.lg,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: _textMuted, size: 20),
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Meu perfil',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PerfilMotoristaPage()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout_outlined),
+            tooltip: 'Sair',
             onPressed: () async {
               await ApiService.logout();
-              if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, '/login', (r) => false);
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
               }
             },
           ),
+          const SizedBox(width: AppSpacing.sm),
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: _accent,
-          unselectedLabelColor: _textMuted,
-          indicatorColor: _accent,
-          indicatorWeight: 2,
           tabs: [
-            Tab(text: 'DISPONÍVEIS (${_disponiveis.length})'),
+            Tab(text: 'Disponíveis (${_disponiveis.length})'),
             Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('MINHA VIAGEM'),
+                  const Text('Minha viagem'),
                   if (_cargaAtiva != null) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: AppSpacing.sm),
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: _green,
+                      decoration: BoxDecoration(
+                        color: status.success,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -195,459 +174,458 @@ Future<void> _carregarTudo() async {
                 ],
               ),
             ),
+            Tab(text: 'Candidaturas (${_candidaturas.length})'),
           ],
         ),
       ),
-      body: _carregando
-          ? const Center(child: CircularProgressIndicator(color: _accent))
-          : _erro != null
-              ? _buildErro()
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildDisponiveis(),
-                    _buildCargaAtiva(),
-                  ],
-                ),
-    );
-  }
-
-  Widget _buildErro() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.signal_wifi_off, color: _red, size: 48),
-          const SizedBox(height: 12),
-          const Text('Sem conexão com o servidor',
-              style: TextStyle(color: _textPrimary, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _carregarTudo,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Tentar novamente'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _accent, foregroundColor: _bg),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Aba: Cargas disponíveis ──────────────────────────────────────────────
-  Widget _buildDisponiveis() {
-    if (_disponiveis.isEmpty) {
-      return const Center(
+      body: AppBody(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined, color: _textMuted, size: 56),
-            SizedBox(height: 12),
-            Text('Nenhuma carga disponível',
-                style: TextStyle(color: _textMuted, fontWeight: FontWeight.w600)),
-            SizedBox(height: 4),
-            Text('Aguarde novas publicações',
-                style: TextStyle(color: _textMuted, fontSize: 12)),
+            // ── Faixa de resumo ───────────────────────────────────────────
+            Container(
+              color: cs.surface,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  AppMetricTile(
+                    label: 'Cargas abertas',
+                    value: '${_disponiveis.length}',
+                    icon: Icons.inventory_2_outlined,
+                    color: cs.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AppMetricTile(
+                    label: 'Aguardando',
+                    value: '${_pendentes.length}',
+                    icon: Icons.hourglass_top,
+                    color: status.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AppMetricTile(
+                    label: 'Entregas feitas',
+                    value: '${_entregas.length}',
+                    icon: Icons.check_circle_outline,
+                    color: status.success,
+                  ),
+                ],
+              ),
+            ),
+            Divider(color: cs.outlineVariant),
+
+            // ── Conteúdo das abas ─────────────────────────────────────────
+            Expanded(
+              child: _carregando
+                  ? const AppLoading()
+                  : _erro != null
+                      ? AppErrorState(
+                          title: 'Sem conexão com o servidor',
+                          detail: 'Servidor: ${ApiService.baseUrl}',
+                          onRetry: _carregarTudo,
+                        )
+                      : TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _abaDisponiveis(),
+                            _abaViagem(),
+                            _abaCandidaturas(),
+                          ],
+                        ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ─── Aba: cargas disponíveis ────────────────────────────────────────────
+  Widget _abaDisponiveis() {
+    if (_disponiveis.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.inbox_outlined,
+        title: 'Nenhuma carga disponível',
+        message: 'Aguarde novas publicações das empresas.',
       );
     }
 
     return RefreshIndicator(
-      color: _accent,
-      backgroundColor: _card,
       onRefresh: _carregarTudo,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
+      child: ListView.separated(
+        padding: AppSpacing.list,
         itemCount: _disponiveis.length,
-        itemBuilder: (ctx, i) => _CargaCard(
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (_, i) => _CargaDisponivelCard(
           carga: _disponiveis[i],
-          onAceitar: () => _aceitarCarga(_disponiveis[i]),
+          onCandidatar: () => _candidatar(_disponiveis[i]),
         ),
       ),
     );
   }
 
-  // ─── Aba: Carga ativa ─────────────────────────────────────────────────────
-  Widget _buildCargaAtiva() {
-    if (_cargaAtiva == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.local_shipping_outlined,
-                color: _textMuted.withOpacity(0.4), size: 72),
-            const SizedBox(height: 16),
-            const Text('Nenhuma viagem ativa',
-                style: TextStyle(
-                    color: _textMuted,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16)),
-            const SizedBox(height: 6),
-            const Text('Aceite uma carga na aba anterior',
-                style: TextStyle(color: _textMuted, fontSize: 12)),
-          ],
-        ),
+  // ─── Aba: viagem ativa + entregas a avaliar ─────────────────────────────
+  Widget _abaViagem() {
+    if (_cargaAtiva == null && _aAvaliar.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.local_shipping_outlined,
+        title: 'Nenhuma viagem ativa',
+        message: 'Candidate-se a uma carga na aba "Disponíveis".',
       );
     }
 
-    final c = _cargaAtiva!;
-    final valor = _fmt(c['valor_bruto_frete']);
-    final pedagio = _fmt(c['estimativa_pedagio']);
-    final distancia =
-        (c['distancia_km'] as num?)?.toStringAsFixed(0) ?? '—';
-    final empresa = c['empresa_nome'] ?? '—';
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: _carregarTudo,
+      child: ListView(
+        padding: AppSpacing.list,
         children: [
-          // Badge status
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _green.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _green.withOpacity(0.4)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.circle, size: 8, color: _green),
-                    SizedBox(width: 6),
-                    Text('EM TRÂNSITO',
-                        style: TextStyle(
-                            color: _green,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Título
-          Text(
-            (c['titulo'] ?? '').toUpperCase(),
-            style: const TextStyle(
-                color: _accent,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                letterSpacing: 1),
-          ),
-          const SizedBox(height: 4),
-          Text(empresa,
-              style: const TextStyle(color: _textMuted, fontSize: 13)),
-          const SizedBox(height: 20),
-
-          // Rota
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF2E3340)),
+          if (_cargaAtiva != null) _viagemAtiva(_cargaAtiva!),
+          if (_aAvaliar.isNotEmpty) ...[
+            if (_cargaAtiva != null) const SizedBox(height: AppSpacing.xxl),
+            const AppSectionHeader(
+              label: 'Avalie suas entregas',
+              icon: Icons.star_outline,
             ),
-            child: Column(
-              children: [
-                _RotaLinha(
-                    icon: Icons.radio_button_checked,
-                    label: 'ORIGEM',
-                    valor: c['origem'] ?? '—',
-                    cor: _green),
-                Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: Container(
-                      height: 24,
-                      width: 1,
-                      color: _textMuted.withOpacity(0.2)),
-                ),
-                _RotaLinha(
-                    icon: Icons.location_on,
-                    label: 'DESTINO',
-                    valor: c['destino'] ?? '—',
-                    cor: _red),
-              ],
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Como foi trabalhar com estas empresas?',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // Métricas
-          Row(
-            children: [
-              _MetricBox(label: 'DISTÂNCIA', value: '$distancia km', color: _blue),
-              const SizedBox(width: 10),
-              _MetricBox(label: 'VALOR BRUTO', value: valor, color: _green),
-              const SizedBox(width: 10),
-              _MetricBox(label: 'PEDÁGIO', value: pedagio, color: _textMuted),
+            const SizedBox(height: AppSpacing.md),
+            for (final e in _aAvaliar) ...[
+              _entregaCard(e),
+              const SizedBox(height: AppSpacing.md),
             ],
-          ),
+          ],
         ],
       ),
     );
   }
 
-  String _fmt(dynamic v) {
-    if (v == null) return 'R\$ —';
-    final d = double.tryParse(v.toString()) ?? 0.0;
-    return 'R\$ ${d.toStringAsFixed(2).replaceAll('.', ',')}';
-  }
-}
+  Widget _viagemAtiva(Map<String, dynamic> c) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final status = AppStatusColors.of(context);
 
-// ─── Card de carga disponível ─────────────────────────────────────────────
-class _CargaCard extends StatelessWidget {
-  final Map<String, dynamic> carga;
-  final VoidCallback onAceitar;
-
-  static const _card = Color(0xFF23272F);
-  static const _accent = Color(0xFFE8A020);
-  static const _textPrimary = Color(0xFFE8E0CC);
-  static const _textMuted = Color(0xFF8A8070);
-  static const _green = Color(0xFF4CAF7D);
-  static const _blue = Color(0xFF5B8FBF);
-
-  const _CargaCard({required this.carga, required this.onAceitar});
-
-  @override
-  Widget build(BuildContext context) {
-    final titulo = carga['titulo'] ?? 'Sem título';
-    final origem = carga['origem'] ?? '—';
-    final destino = carga['destino'] ?? '—';
-    final distancia =
-        (carga['distancia_km'] as num?)?.toStringAsFixed(0) ?? '—';
-    final valor = _fmt(carga['valor_bruto_frete']);
-    final empresa = carga['empresa_nome'] ?? '—';
-    final notaMin =
-        (carga['nota_minima_motorista'] as num?)?.toStringAsFixed(1) ?? '0.0';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2E3340)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Título + distância
-            Row(
-              children: [
-                Expanded(
-                  child: Text(titulo,
-                      style: const TextStyle(
-                          color: _textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _blue.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _blue.withOpacity(0.3)),
-                  ),
-                  child: Text('$distancia km',
-                      style: const TextStyle(
-                          color: _blue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-
-            // Empresa
-            Row(
-              children: [
-                const Icon(Icons.business_outlined,
-                    size: 12, color: _textMuted),
-                const SizedBox(width: 4),
-                Text(empresa,
-                    style:
-                        const TextStyle(color: _textMuted, fontSize: 11)),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Rota simples
-            Row(
-              children: [
-                const Icon(Icons.radio_button_checked,
-                    size: 13, color: _green),
-                const SizedBox(width: 4),
-                Expanded(
-                    child: Text(origem,
-                        style: const TextStyle(
-                            color: _textPrimary, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis)),
-                const Icon(Icons.arrow_forward,
-                    size: 13, color: _accent),
-                const SizedBox(width: 4),
-                Expanded(
-                    child: Text(destino,
-                        style: const TextStyle(
-                            color: _textPrimary, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.end)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            const Divider(color: Color(0xFF2E3340), height: 1),
-            const SizedBox(height: 10),
-
-            // Valor + nota + botão
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('VALOR BRUTO',
-                        style: TextStyle(
-                            color: _textMuted,
-                            fontSize: 9,
-                            letterSpacing: 1)),
-                    Text(valor,
-                        style: const TextStyle(
-                            color: _green,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15)),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _accent.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _accent.withOpacity(0.2)),
-                  ),
-                  child: Text('★ $notaMin mín.',
-                      style: const TextStyle(
-                          color: _accent, fontSize: 11)),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: onAceitar,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [Color(0xFFE8A020), Color(0xFFC07010)]),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text('ACEITAR',
-                        style: TextStyle(
-                            color: Color(0xFF1A1D23),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 12,
-                            letterSpacing: 1)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _fmt(dynamic v) {
-    if (v == null) return 'R\$ —';
-    final d = double.tryParse(v.toString()) ?? 0.0;
-    return 'R\$ ${d.toStringAsFixed(2).replaceAll('.', ',')}';
-  }
-}
-
-// ─── Widgets auxiliares ───────────────────────────────────────────────────
-class _RotaLinha extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String valor;
-  final Color cor;
-
-  const _RotaLinha(
-      {required this.icon,
-      required this.label,
-      required this.valor,
-      required this.cor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: cor),
-        const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        AppStatusChip(
+          label: 'Em trânsito',
+          color: status.info,
+          icon: Icons.local_shipping_outlined,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          c['titulo']?.toString() ?? '—',
+          style: tt.headlineSmall?.copyWith(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        InkWell(
+          onTap: () => _verPerfilEmpresa(c['empresa']),
+          borderRadius: AppRadius.brTag,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.business_outlined,
+                    size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  c['empresa_nome']?.toString() ?? '—',
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+
+        AppRouteBlock(
+          origem: c['origem']?.toString() ?? '—',
+          destino: c['destino']?.toString() ?? '—',
+        ),
+        const SizedBox(height: AppSpacing.lg),
+
+        Row(
           children: [
-            Text(label,
-                style: TextStyle(
-                    color: cor.withOpacity(0.7),
-                    fontSize: 9,
-                    letterSpacing: 1.2)),
-            Text(valor,
-                style: const TextStyle(
-                    color: Color(0xFFE8E0CC),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+            AppMetricTile(
+              label: 'Distância',
+              value: Fmt.km(c['distancia_km']),
+              color: status.info,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            AppMetricTile(
+              label: 'Valor bruto',
+              value: Fmt.brl(c['valor_bruto_frete']),
+              color: status.success,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            AppMetricTile(
+              label: 'Pedágio',
+              value: Fmt.brl(c['estimativa_pedagio']),
+              color: cs.onSurfaceVariant,
+            ),
           ],
         ),
       ],
     );
   }
-}
 
-class _MetricBox extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
+  Widget _entregaCard(dynamic e) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
-  static const _bg = Color(0xFF1A1D23);
-
-  const _MetricBox(
-      {required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: _bg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
+    return Card(
+      child: Padding(
+        padding: AppSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: TextStyle(
-                    color: color.withOpacity(0.7),
-                    fontSize: 9,
-                    letterSpacing: 1)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            Text(
+              e['titulo']?.toString() ?? 'Entrega',
+              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              e['empresa_nome']?.toString() ?? '—',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _verPerfilEmpresa(e['empresa']),
+                  icon: const Icon(Icons.visibility_outlined, size: 16),
+                  label: const Text('Ver empresa'),
+                  style: AppCompactButton.outlined,
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () => _avaliarEmpresa(e),
+                  icon: const Icon(Icons.star_outline, size: 16),
+                  label: const Text('Avaliar'),
+                  style: AppCompactButton.style,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Aba: minhas candidaturas ───────────────────────────────────────────
+  Widget _abaCandidaturas() {
+    if (_candidaturas.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.assignment_outlined,
+        title: 'Nenhuma candidatura ainda',
+        message: 'Candidate-se a uma carga na aba "Disponíveis".',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _carregarTudo,
+      child: ListView.separated(
+        padding: AppSpacing.list,
+        itemCount: _candidaturas.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (_, i) => _CandidaturaCard(candidatura: _candidaturas[i]),
+      ),
+    );
+  }
+}
+
+/// Card de carga aberta, na visão do motorista.
+class _CargaDisponivelCard extends StatelessWidget {
+  final Map<String, dynamic> carga;
+  final VoidCallback onCandidatar;
+
+  const _CargaDisponivelCard({required this.carga, required this.onCandidatar});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final status = AppStatusColors.of(context);
+    final notaMin = (carga['nota_minima_motorista'] as num?)?.toDouble() ?? 0;
+
+    return Card(
+      child: Padding(
+        padding: AppSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    carga['titulo']?.toString() ?? 'Sem título',
+                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                if (notaMin > 0)
+                  AppStatusChip(
+                    label: '${Fmt.nota(notaMin)} mín.',
+                    color: status.brand,
+                    icon: Icons.star_rounded,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Row(
+              children: [
+                Icon(Icons.business_outlined,
+                    size: 13, color: cs.onSurfaceVariant),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    carga['empresa_nome']?.toString() ?? '—',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+
+            AppRouteLine(
+              origem: carga['origem']?.toString() ?? '—',
+              destino: carga['destino']?.toString() ?? '—',
+              distancia: Fmt.km(carga['distancia_km']),
+            ),
+
+            const SizedBox(height: AppSpacing.md),
+            Divider(color: cs.outlineVariant),
+            const SizedBox(height: AppSpacing.md),
+
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'VALOR BRUTO',
+                      style: TextStyle(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 9,
+                        letterSpacing: 1,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      Fmt.brl(carga['valor_bruto_frete']),
+                      style: TextStyle(
+                        color: status.success,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: onCandidatar,
+                  icon: const Icon(Icons.how_to_reg_outlined, size: 16),
+                  label: const Text('Candidatar'),
+                  style: AppCompactButton.style,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card de acompanhamento de candidatura.
+class _CandidaturaCard extends StatelessWidget {
+  final Map<String, dynamic> candidatura;
+
+  const _CandidaturaCard({required this.candidatura});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final visual = statusCandidatura(context, candidatura['status']?.toString());
+    final mensagem = candidatura['mensagem']?.toString() ?? '';
+
+    return Card(
+      child: Padding(
+        padding: AppSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    candidatura['carga_titulo']?.toString() ?? 'Carga',
+                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                AppStatusChip(
+                  label: visual.label,
+                  color: visual.color,
+                  icon: visual.icon,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              visual.descricao,
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            if (mensagem.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: AppRadius.brTag,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        mensagem,
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
