@@ -1,7 +1,12 @@
 venv/
 env/
+.venv/
 
 *.sqlite3
+
+# Uploads de usuários (fotos de perfil, cargas, logos)
+media/
+staticfiles/
 
 __pycache__/
 *.py[cod]
