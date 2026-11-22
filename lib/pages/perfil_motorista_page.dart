@@ -39,6 +39,7 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
   final _telefoneCtrl = TextEditingController();
   final _veiculoCtrl = TextEditingController();
   final _expCtrl = TextEditingController();
+  final _consumoCtrl = TextEditingController();
   XFile? _novaFoto;
 
   @override
@@ -54,6 +55,7 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
     _telefoneCtrl.dispose();
     _veiculoCtrl.dispose();
     _expCtrl.dispose();
+    _consumoCtrl.dispose();
     super.dispose();
   }
 
@@ -71,6 +73,8 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
       _telefoneCtrl.text = p['telefone']?.toString() ?? '';
       _veiculoCtrl.text = p['tipo_veiculo']?.toString() ?? '';
       _expCtrl.text = (p['anos_experiencia'] ?? 0).toString();
+      _consumoCtrl.text =
+          p['consumo_medio_km_l']?.toString().replaceAll('.', ',') ?? '';
       if (mounted) setState(() => _perfil = p);
     } catch (e) {
       if (mounted) setState(() => _erro = e.toString());
@@ -89,6 +93,13 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
   }
 
   Future<void> _salvar() async {
+    final consumoTexto = _consumoCtrl.text.trim();
+    final consumo = Fmt.tryParseDecimal(consumoTexto);
+    if (consumoTexto.isNotEmpty && (consumo == null || consumo < 0.1)) {
+      AppSnack.error(context, 'Informe um consumo válido em km/l.');
+      return;
+    }
+
     setState(() => _salvando = true);
     try {
       final res = await ApiService.atualizarPerfilMotorista(
@@ -98,6 +109,7 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
           'telefone': _telefoneCtrl.text.trim(),
           'tipo_veiculo': _veiculoCtrl.text.trim(),
           'anos_experiencia': int.tryParse(_expCtrl.text.trim()) ?? 0,
+          'consumo_medio_km_l': consumo ?? '',
         },
         foto: _novaFoto,
       );
@@ -365,6 +377,17 @@ class _PerfilMotoristaPageState extends State<PerfilMotoristaPage> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Anos de experiência',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _consumoCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Consumo médio (km/l)',
+                hintText: 'Ex.: 2,5',
+                helperText: 'Usado para estimar o lucro de cada frete',
               ),
             ),
             const SizedBox(height: AppSpacing.md),

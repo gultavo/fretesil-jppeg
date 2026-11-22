@@ -23,6 +23,7 @@ COPY . .
 
 # Usuario sem privilegios
 RUN useradd --create-home appuser \
+    && mkdir -p /app/media /app/staticfiles \
     && chown -R appuser:appuser /app
 USER appuser
 

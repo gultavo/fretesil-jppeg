@@ -5,7 +5,8 @@ abstract final class Fmt {
   static String brl(dynamic valor) {
     final d = _toDouble(valor);
     if (d == null) return r'R$ —';
-    return 'R\$ ${_milhar(d.toStringAsFixed(2))}';
+    final sinal = d < 0 ? '-' : '';
+    return '${sinal}R\$ ${_milhar(d.abs().toStringAsFixed(2))}';
   }
 
   /// `1500.5` → `R$ 1,5 mil` — para os cartões de resumo.
@@ -35,6 +36,11 @@ abstract final class Fmt {
   /// Versão tolerante de [parseEntrada]: devolve nulo em vez de lançar.
   static double? tryParseEntrada(String v) =>
       double.tryParse(v.trim().replaceAll('.', '').replaceAll(',', '.'));
+
+  /// Valor pequeno com casas decimais (`"6,50"` ou `"6.50"`) → `6.5`.
+  /// Aqui o ponto é decimal, nunca separador de milhar.
+  static double? tryParseDecimal(String v) =>
+      double.tryParse(v.trim().replaceAll(',', '.'));
 
   static double? _toDouble(dynamic v) {
     if (v == null) return null;

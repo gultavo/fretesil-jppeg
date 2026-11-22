@@ -200,6 +200,28 @@ class _DetalhesCargaPageState extends State<DetalhesCargaPage> {
                   ),
                 ],
               ),
+              if (_c['financeiro'] is Map) ...[
+                const SizedBox(height: AppSpacing.md),
+                AppDetailList(
+                  itens: [
+                    (
+                      Icons.local_gas_station_outlined,
+                      'Combustível',
+                      Fmt.brl(_c['financeiro']['combustivel']),
+                    ),
+                    (
+                      Icons.receipt_long_outlined,
+                      'Total de despesas',
+                      Fmt.brl(_c['financeiro']['despesas']),
+                    ),
+                    (
+                      Icons.trending_up,
+                      'Lucro estimado do motorista',
+                      Fmt.brl(_c['financeiro']['lucro_estimado']),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
 
               // ── Descrição e requisitos ──────────────────────────────────

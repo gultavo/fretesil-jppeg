@@ -37,6 +37,10 @@ class Caminhoneiro(models.Model):
     telefone = models.CharField(max_length=20, blank=True)
     tipo_veiculo = models.CharField(max_length=120, blank=True, help_text="Ex: Carreta baú, Bitrem, Truck")
     anos_experiencia = models.PositiveIntegerField(default=0)
+    consumo_medio_km_l = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(0.1)],
+        help_text="Consumo médio do veículo, em km/l"
+    )
     foto_perfil = models.ImageField(upload_to='motoristas/fotos/', null=True, blank=True)
 
     media_notas = models.FloatField(default=0.0, editable=False)

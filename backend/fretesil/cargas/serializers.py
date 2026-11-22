@@ -10,6 +10,7 @@ class CargaSerializer(serializers.ModelSerializer):
     tipo_carreta_display = serializers.CharField(source='get_tipo_carreta_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     total_candidaturas = serializers.SerializerMethodField()
+    financeiro = serializers.SerializerMethodField()
 
     # Dados do motorista alocado — a empresa vê tudo isso no detalhe da carga
     # em trânsito.
@@ -33,6 +34,7 @@ class CargaSerializer(serializers.ModelSerializer):
             'local_carreta', 'tipo_carreta', 'tipo_carreta_display',
             'distancia_km', 'foto_carga',
             'valor_bruto_frete', 'estimativa_pedagio', 'comissao_app',
+            'preco_combustivel', 'financeiro',
             'status', 'status_display', 'motorista_alocado', 'motorista_avaliado',
             'empresa_avaliada', 'nota_minima_motorista', 'consumo_veiculo_alocado',
             'lucro_estimado', 'data_publicacao', 'data_entrega', 'total_candidaturas',
@@ -50,16 +52,42 @@ class CargaSerializer(serializers.ModelSerializer):
     def get_total_candidaturas(self, obj):
         return obj.candidaturas.filter(status='pendente').count()
 
-    def get_lucro_estimado(self, obj):
-        if not obj.consumo_veiculo_alocado:
+    def validate_distancia_km(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('A distância deve ser maior que zero.')
+        return value
+
+    def validate_valor_bruto_frete(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('O valor do frete deve ser maior que zero.')
+        return value
+
+    def validate_estimativa_pedagio(self, value):
+        if value < 0:
+            raise serializers.ValidationError('O pedágio não pode ser negativo.')
+        return value
+
+    def _resumo(self, obj):
+        # Na carga aberta, o motorista logado vê a estimativa com o próprio consumo.
+        consumo = obj.consumo_veiculo_alocado
+        if not consumo and obj.status == 'disponivel':
+            request = self.context.get('request')
+            motorista = getattr(getattr(request, 'user', None), 'perfil_motorista', None)
+            consumo = getattr(motorista, 'consumo_medio_km_l', None)
+        return obj.resumo_financeiro(consumo)
+
+    def get_financeiro(self, obj):
+        resumo = self._resumo(obj)
+        if resumo is None:
             return None
-        from decimal import Decimal
-        preco_diesel = Decimal('6.0')
-        consumo = Decimal(str(obj.consumo_veiculo_alocado))
-        distancia = Decimal(str(obj.distancia_km))
-        gasto_diesel = (distancia / consumo) * preco_diesel
-        lucro = obj.valor_bruto_frete - obj.estimativa_pedagio - gasto_diesel
-        return round(float(lucro), 2)
+        return {
+            chave: valor if isinstance(valor, float) else str(valor)
+            for chave, valor in resumo.items()
+        }
+
+    def get_lucro_estimado(self, obj):
+        resumo = self._resumo(obj)
+        return float(resumo['lucro_estimado']) if resumo else None
 
 
 class CandidaturaSerializer(serializers.ModelSerializer):

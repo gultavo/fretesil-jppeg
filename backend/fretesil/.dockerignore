@@ -12,11 +12,25 @@ __pycache__/
 *.sqlite3
 *.log
 
+# Uploads de usuarios e estaticos gerados (nao vao para a imagem)
+media/
+staticfiles/
+static_root/
+
 # Variaveis de ambiente (passadas via docker-compose)
 .env
+.env.*
 
 # Controle de versao / IDE
 .git/
 .gitignore
+.dockerignore
 .idea/
 .vscode/
+
+# Testes e artefatos locais
+.pytest_cache/
+.coverage
+htmlcov/
+*.bak
+*.tmp

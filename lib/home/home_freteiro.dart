@@ -466,14 +466,31 @@ class _HomeFreteiroState extends State<HomeFreteiro>
             ),
             (
               Icons.payments_outlined,
-              'Você recebe',
+              'Valor bruto',
               Fmt.brl(c['valor_bruto_frete']),
+            ),
+            (
+              Icons.percent,
+              'Comissão',
+              Fmt.brl(c['comissao_app']),
             ),
             (
               Icons.toll_outlined,
               'Pedágio',
               Fmt.brl(c['estimativa_pedagio']),
             ),
+            if (c['financeiro'] is Map) ...[
+              (
+                Icons.local_gas_station_outlined,
+                'Combustível',
+                Fmt.brl(c['financeiro']['combustivel']),
+              ),
+              (
+                Icons.trending_up,
+                'Lucro estimado',
+                Fmt.brl(c['financeiro']['lucro_estimado']),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: AppSpacing.xxl),
@@ -747,8 +764,11 @@ class _CargaDisponivelCard extends StatelessWidget {
                       Fmt.km(carga['distancia_km']), status.info),
                 ),
                 Expanded(
-                  child: _valor(context, 'VOCÊ RECEBE',
-                      Fmt.brl(carga['valor_bruto_frete']), status.success),
+                  child: carga['lucro_estimado'] != null
+                      ? _valor(context, 'LUCRO ESTIMADO',
+                          Fmt.brl(carga['lucro_estimado']), status.success)
+                      : _valor(context, 'VALOR BRUTO',
+                          Fmt.brl(carga['valor_bruto_frete']), status.success),
                 ),
               ],
             ),

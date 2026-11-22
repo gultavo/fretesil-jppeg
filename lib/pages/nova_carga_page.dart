@@ -32,6 +32,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
   final _distanciaCtrl = TextEditingController();
   final _valorBrutoCtrl = TextEditingController();
   final _pedagioCtrl = TextEditingController();
+  final _precoCombustivelCtrl = TextEditingController();
   final _notaMinimaCtrl = TextEditingController(text: '0,0');
   final _descricaoCtrl = TextEditingController();
   String _tipoCarreta = TipoCarreta.padrao;
@@ -48,6 +49,7 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
     _distanciaCtrl.dispose();
     _valorBrutoCtrl.dispose();
     _pedagioCtrl.dispose();
+    _precoCombustivelCtrl.dispose();
     _notaMinimaCtrl.dispose();
     super.dispose();
   }
@@ -57,6 +59,8 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
     setState(() => _enviando = true);
 
     try {
+      final precoCombustivel =
+          Fmt.tryParseDecimal(_precoCombustivelCtrl.text);
       final dados = {
         'titulo': _tituloCtrl.text.trim(),
         'origem': _origemCtrl.text.trim(),
@@ -71,6 +75,8 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
             Fmt.tryParseEntrada(_pedagioCtrl.text) ?? 0.0,
         'nota_minima_motorista':
             Fmt.tryParseEntrada(_notaMinimaCtrl.text) ?? 0.0,
+        // Vazio: a API usa o preço padrão configurado no servidor.
+        if (precoCombustivel != null) 'preco_combustivel': precoCombustivel,
       };
 
       final result = await ApiService.criarCarga(dados, foto: _foto);
@@ -328,6 +334,20 @@ class _NovaCargaPageState extends State<NovaCargaPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              _CampoNumerico(
+                controller: _precoCombustivelCtrl,
+                label: 'Preço do diesel por litro (R\$)',
+                hint: 'Vazio usa o preço padrão',
+                icon: Icons.local_gas_station_outlined,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  final preco = Fmt.tryParseDecimal(v);
+                  if (preco == null || preco <= 0) return 'Preço inválido';
+                  return null;
+                },
               ),
               const SizedBox(height: AppSpacing.md),
 

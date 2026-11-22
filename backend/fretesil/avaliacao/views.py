@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import viewsets, permissions, serializers
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import Avaliacao, AvaliacaoCaminhoneiro
@@ -9,6 +10,8 @@ class AvaliacaoViewSet(viewsets.ModelViewSet):
     queryset = Avaliacao.objects.all()
     serializer_class = AvaliacaoSerializer
     permission_classes = [permissions.IsAuthenticated]
+    # Avaliações não podem ser editadas nem apagadas pela API.
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         qs = Avaliacao.objects.all()
@@ -17,6 +20,7 @@ class AvaliacaoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(empresa_id=empresa_id)
         return qs
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # O motorista avalia a empresa, mas só depois da entrega concluída
         user = self.request.user
@@ -29,6 +33,7 @@ class AvaliacaoViewSet(viewsets.ModelViewSet):
 
         if carga is None:
             raise ValidationError({"carga": "Informe a carga entregue que está sendo avaliada."})
+        carga = Carga.objects.select_for_update().get(pk=carga.pk)
 
         if carga.motorista_alocado_id != motorista.id:
             raise PermissionDenied("Você não realizou esta entrega.")
@@ -52,6 +57,8 @@ class AvaliacaoCaminhoneiroViewSet(viewsets.ModelViewSet):
     queryset = AvaliacaoCaminhoneiro.objects.all()
     serializer_class = AvaliacaoCaminhoneiroSerializer
     permission_classes = [permissions.IsAuthenticated]
+    # Avaliações não podem ser editadas nem apagadas pela API.
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         qs = AvaliacaoCaminhoneiro.objects.select_related('empresa', 'caminhoneiro')
@@ -60,6 +67,7 @@ class AvaliacaoCaminhoneiroViewSet(viewsets.ModelViewSet):
             qs = qs.filter(caminhoneiro_id=caminhoneiro_id)
         return qs
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # Aqui a empresa avalia o motorista, mas só depois da entrega concluída
         user = self.request.user
@@ -72,6 +80,7 @@ class AvaliacaoCaminhoneiroViewSet(viewsets.ModelViewSet):
 
         if carga is None:
             raise ValidationError({"carga": "Informe a carga entregue que está sendo avaliada."})
+        carga = Carga.objects.select_for_update().get(pk=carga.pk)
 
         if carga.empresa_id != empresa.id:
             raise PermissionDenied("Esta carga não pertence à sua empresa.")

@@ -11,10 +11,6 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
         tem_empresa = Empresa.objects.filter(user=user).exists()
         tem_motorista = Caminhoneiro.objects.filter(user=user).exists()
 
-        print('USER ID:', user.pk)
-        print('TEM EMPRESA:', tem_empresa)
-        print('TEM MOTORISTA:', tem_motorista)
-
         if tem_empresa:
             data['tipo_usuario'] = 'empresa'
         elif tem_motorista:

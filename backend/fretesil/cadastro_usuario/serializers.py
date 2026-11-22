@@ -26,7 +26,7 @@ class EmpresaSerializer(serializers.ModelSerializer):
 class EmpresaReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Empresa
-        fields = '__all__'
+        fields = ['id', 'razao_social']
 
 class CaminhoneiroSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(write_only=True)
@@ -57,4 +57,4 @@ class CaminhoneiroSerializer(serializers.ModelSerializer):
 class CaminhoneiroReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Caminhoneiro
-        fields = '__all__'
+        fields = ['id', 'nome_completo']
